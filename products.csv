@@ -1,8 +1,8 @@
-p_id,p_name,p_amount,p_quantity
-p_0001,product 1,100,100 ml
-p_0002,product 2,200,200 ml
-p_0003,product 3,300,1 kg
-p_0004,product 4,100,1 kg
-p_0005,product 5,150,300 ml
-p_0006,product 6,250,1 kg
-p_0007,product 7,800,1 kg
+p_id,p_name,p_amount,p_quantity,p_count
+p_0001,product 1,100,100 ml,2
+p_0002,product 2,200,200 ml,3
+p_0003,product 3,300,1 kg,3
+p_0004,product 4,100,1 kg,0
+p_0005,product 5,150,300 ml,0
+p_0006,product 6,250,1 kg,1
+p_0007,product 7,800,1 kg,6
