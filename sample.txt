@@ -1,20 +1,16 @@
-SELECTION
----------------------------------
-1. Four sheets in one Excel--> Document History, Source To Target, DPR, Map Group Code
-2. read 2,3,4 sheets and convert to separate df
-3. Read the column k(Target Object Name) in source_to_target_df (read in df2)
-4. Need to list all the unique values from col k as text box and submit button , with the click.
-5. post the submit button have to filter for specific values and 
-	show filter for Column Q in (Map Group ID) in source_to_target_df (read in df2)
-6. Need to list all the unique values from col Q as text box and submit button , with the click.
------==
-MAPPING
-------------------------------------
-7. create a new df,
-8. filter the rows only for col B (Is DPR as Source is "FALSE") and 
-	fetch the col E (Source Object Name) , Col G (Source Attribute Name) and Col M (Target Attribute Name) into a new df	
-9. filter the rows only for col B (Is DPR as Source is "TRUE") and 
+	  
+	  When PRTY_TYPE_CD = 'I'
+1. If PROFILE_ID is not null, use PROFILE_ID to join to SRC_KEY2 in C_PSEUDO_PRTY (where DATA_SRC = 'ICM' and SOURCE_COUNTRY_CODE = 'ID') and load CONCAT (DATA_SRC, '-', SOURCE_COUNTRY_CODE, '-',PSEUDO_KEY) as ENTRP_PRTY_SROGT_ID
+2. If PROFILE_ID is null, then ENTRP_PRTY_SROGT_ID = null
+
+When PRTY_TYPE_CD <> 'I', sort record by MAST_OPEN_DT descending, DOM_MAST_REF and LE_ID, and group record by PRTY_SROGT_ID:
+1. If all records have DOM_MAST_REF as null, then load ENTRP_PRTY_SROGT_ID = null
+2. If DOM_MAST_REF is not null, select the record with latest MAST_OPEN_DT and LE_ID not null,
+       - use CONCAT(TRIM(LE_ID), '-', TRIM(SP_ID)) to join to SRC_KEY1 in  C_PSEUDO_PRTY (where DATA_SRC = 'SCI' and SOURCE_COUNTRY_CODE = 'XX') and load  CONCAT (DATA_SRC, '-', SOURCE_COUNTRY_CODE, '-',PSEUDO_KEY) as ENTRP_PRTY_SROGT_ID.
+       - if all records have null LE_ID then ENTRP_PRTY_SROGT_ID = null	   
+3. If WEP.CLIENTID IS NULL, select the record with latest MAST_OPEN_DT and LE_ID not null,
+       - use CONCAT(TRIM(LE_ID), '-', TRIM(SP_ID)) to join to SRC_KEY1 in  C_PSEUDO_PRTY (where DATA_SRC = 'SCI' and SOURCE_COUNTRY_CODE = 'XX') and load  CONCAT (DATA_SRC, '-', SOURCE_COUNTRY_CODE, '-',PSEUDO_KEY) as ENTRP_PRTY_SROGT_ID.
+       - if all records have null LE_ID then ENTRP_PRTY_SROGT_ID = null	  
 
 
-Hhh check
-	
+---------------------------------------------------------
