@@ -3,13 +3,13 @@ import pandas as pd
 import numpy as np
 import re
 
-my_variable_1 = 'Yes' #'row_col_count' 'No'
-my_variable_2 = [] #'columntodrop', [])
-my_variable_3 = [] #'columntoretain', [])
+my_variable_1 = 'Yes' #'row_col_count' 
+my_variable_2 = [''] #'columntodrop', [])
+my_variable_3 = ['id'] #'columntoretain', [])
 
 # DataFrames
 df1 = {"ID": [1, 2, 3, 4, 5], "Name": ["Alice", "Bob", "Charlie", "David", "Eve"], "Age": [25, 30, 35, 40, 45], "Score": [90, 85, 88, 92, 87]}
-df2 = {"ID": [1, 2, 3, 4, 5], "Name": ["Alice", "Bob", "Charlie", "David", "Eve"], "Age": [25, 30, 35, 40, 45], "Score": [90, 85, 88, 92, 87]}
+df2 = {"ID": [3,2, 3, 4, 5], "Name": ["Alice", "Bob", "Charlie", "David", "Eve"], "Age": [25, 30, 35, 40, 45], "Score": [90, 85, 88, 92, 87]}
 
 DFDSS = pd.DataFrame(df1) #test
 DFPAX = pd.DataFrame(df2) #actual
@@ -132,7 +132,7 @@ else:
         if len(my_variable_3) > 0:
             error_df.insert(0, my_variable_3[0]+ ' (primarykey)', retained_column)
 
-        result_df = error_df
+        result_df = error_df    
 
 
 
