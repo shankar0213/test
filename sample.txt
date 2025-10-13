@@ -41,3 +41,9 @@ except Exception as e:
     print("SSH or Hive execution failed:", str(e))
 finally:
     client.close()
+
+
+--------------
+py 11 ---> venv
+venv\Scripts\pip.exe install pandas --trusted-host pypi.org --trusted-host files.pythonhosted.org --trusted-host pypi.python.org
+
