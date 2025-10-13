@@ -1,86 +1,138 @@
-import paramiko
+# Import required libraries
 import pandas as pd
+import numpy as np
+import re
 
-# Function to establish SSH connection
-def establish_ssh_connection(host, user, password, port=22):
-    try:
-        ssh_client = paramiko.SSHClient()
-        ssh_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-        ssh_client.connect(host, port=port, username=user, password=password)
-        print("✅ SSH Connection Established")
-        return ssh_client
-    except Exception as e:
-        print(f"❌ SSH connection failed: {e}")
-        return None
+my_variable_1 = 'Yes' #'row_col_count' 'No'
+my_variable_2 = [] #'columntodrop', [])
+my_variable_3 = [] #'columntoretain', [])
 
-# Function to run Beeline query and download result as CSV
-def run_beeline_and_download_csv(ssh_client, query, remote_csv="/tmp/hive_output.csv", local_csv="hive_output.csv"):
-    try:
-        username = ssh_client.get_transport().get_username()
+# DataFrames
+df1 = {"ID": [1, 2, 3, 4, 5], "Name": ["Alice", "Bob", "Charlie", "David", "Eve"], "Age": [25, 30, 35, 40, 45], "Score": [90, 85, 88, 92, 87]}
+df2 = {"ID": [1, 2, 3, 4, 5], "Name": ["Alice", "Bob", "Charlie", "David", "Eve"], "Age": [25, 30, 35, 40, 45], "Score": [90, 85, 88, 92, 87]}
 
-        # Build the Beeline command
-        beeline_cmd = f'beeline -n {username} --outputformat=csv2 -e "{query}" > {remote_csv}'
+DFDSS = pd.DataFrame(df1) #test
+DFPAX = pd.DataFrame(df2) #actual
 
-        # Run Beeline remotely
-        stdin, stdout, stderr = ssh_client.exec_command(beeline_cmd)
-        exit_status = stdout.channel.recv_exit_status()
 
-        error = stderr.read().decode().strip()
-        if exit_status != 0 or "ERROR" in error.upper():
-            print(f"⚠️ Beeline failed:\n{error}")
-            return None
+# Data Cleaning Function
+def data_cleaning(dataframe):
+    dataframe.columns = [re.sub('[^a-zA-Z0-9]', '', names.lower()) for names in dataframe.columns.values]
+    dataframe.fillna('no_value', inplace=True)
+    dataframe = dataframe.astype("str")
+    dataframe.sort_index(axis=1, inplace=True)
+    dataframe.sort_values(by=list(dataframe.columns), inplace=True)
+    dataframe.reset_index(inplace=True, drop=True)
+    return dataframe
 
-        # Download the file via SFTP
-        sftp = ssh_client.open_sftp()
-        sftp.get(remote_csv, local_csv)
-        sftp.remove(remote_csv)
-        sftp.close()
+# Column Identification Function
+def column_identification(df, variable):
+    df_cols_to_drop = []
+    for i in df.columns:
+        k = re.sub('[^a-zA-Z0-9]', '', i.lower())
+        for j in variable:
+            j = re.sub('[^a-zA-Z0-9]', '', j.lower())
+            if k == j:
+                df_cols_to_drop.append(i)
+    return df_cols_to_drop
 
-        print(f"📥 Downloaded CSV to: {local_csv}")
-        return local_csv
+# Drop specified columns
+if len(my_variable_2) > 0:
+    dfdss_cols_to_drop = column_identification(DFDSS, my_variable_2)
+    dfpax_cols_to_drop = column_identification(DFPAX, my_variable_2)
 
-    except Exception as e:
-        print(f"❌ Error during Beeline or download: {e}")
-        return None
+    DFDSS = DFDSS.drop(dfdss_cols_to_drop, axis=1)
+    DFPAX = DFPAX.drop(dfpax_cols_to_drop, axis=1)
 
-# Main script logic
-def main():
-    print("🔐 SSH to Hive Server")
+# Clean data
+DFDSS = data_cleaning(DFDSS)
+DFPAX = data_cleaning(DFPAX)
 
-    # --- SSH DETAILS ---
-    ssh_host = input("Hostname/IP: ").strip()
-    ssh_user = input("Username: ").strip()
-    ssh_password = input("Password: ").strip()
-    ssh_port = 22  # Or customize if needed
+# Normalize column names to lowercase and alphanumeric
+my_variable_3 = [re.sub('[^a-zA-Z0-9]', '', names.lower()) for names in my_variable_3]
 
-    # Connect via SSH
-    ssh_client = establish_ssh_connection(ssh_host, ssh_user, ssh_password, ssh_port)
-    if not ssh_client:
-        return
+# Perform row and column count validation
+if my_variable_1 == 'Yes':
+    if DFDSS.shape == DFPAX.shape and (DFPAX.columns == DFDSS.columns).sum() == DFPAX.shape[1]:
+        if DFDSS.equals(DFPAX) == True:
+            # If data is identical            
+            result_df = pd.DataFrame({'Result': ['Both the datasets are the same.']})
+            print(result_df)
+        else:
+            # Data mismatch detected
+            temp = pd.DataFrame(DFDSS == DFPAX)
+            df1 = temp[~temp.all(axis=1)]
+            
+            for i in df1.columns:
+                if len(df1.index[df1[i] == False]) > 0:
+                    error_df = DFDSS.iloc[df1.index[df1[i] == False]].loc[:,i:]
+                    actual_df = DFPAX.iloc[df1.index[df1[i] == False]].loc[:,i:]
 
-    # --- QUERY INPUT ---
-    print("\n📥 Enter your Hive query (end with a semicolon `;`):")
-    query = input().strip()
+                    if len(my_variable_3) > 0:
+                        retained_column = pd.DataFrame (DFDSS.iloc[df1.index[df1[i] == False]])[my_variable_3[0]]
+                        
+                    break
 
-    # Run Beeline and get CSV
-    local_csv_path = run_beeline_and_download_csv(ssh_client, query)
+            new_column_name = actual_df.columns[0]
+            error_df.insert(1, new_column_name +'_test', actual_df[new_column_name])
 
-    # Load into pandas DataFrame
-    if local_csv_path:
-        try:
-            df = pd.read_csv(local_csv_path)
-            print("\n📊 Query Results:")
-            print(df)
-        except Exception as e:
-            print(f"❌ Failed to read CSV: {e}")
+            if len(my_variable_3) > 0:
+                error_df.insert(0, my_variable_3[0]+ ' (primarykey)', retained_column)
 
-    # Close SSH
-    ssh_client.close()
-    print("🔒 SSH connection closed.")
+            result_df = error_df
+            print(result_df)
+    else:
+        # Shape or column mismatch
+        mismatch_df = pd.DataFrame()
+        missing_paxata_col = []
+        missing_dataiku_col = []
 
-if __name__ == "__main__":
-    main()
+        if DFDSS.shape != DFPAX.shape:
+            df_op = pd.DataFrame({'Result': ['There is a mismatch in actual, test row and column counts.'],'test Row/Column count': [DFDSS.shape],'actual Row/Column count': [DFPAX.shape]  })
+            mismatch_df = mismatch_df._append(df_op)
 
+        elif (DFPAX.columns == DFDSS.columns).sum() != DFPAX.shape[1] :
+            for i in DFPAX.columns:
+                if i not in DFDSS.columns:
+                    missing_paxata_col.append(i)
+
+            for j in DFDSS.columns:
+                if j not in DFPAX. columns:
+                    missing_dataiku_col.append(j)
+
+            df_op2 = pd.DataFrame({'Result': ['There is mismatch in actual, test column names. '], 'Missing actual columns': [missing_paxata_col],'missing test columns':[missing_dataiku_col] })
+            mismatch_df = mismatch_df._append (df_op2)
+
+        
+        result_df = mismatch_df
+        print(result_df)
+
+else:
+    print("------------")
+    if DFDSS.equals(DFPAX) == True:
+        df = pd.DataFrame({'Result': ['Both the tables are same' ]})
+        result_df = df # Compute a Pandas dataframe to write into OUTPUT DATASET NAME
+        
+
+    else:
+        temp = pd.DataFrame(DFDSS == DFPAX)
+        df1 = temp[~temp.a11(axis=1)]
+        for i in df1.columns:
+            if len(df1.index[df1[i] == False]) > 0:
+                error_df = DFDSS.iloc[df1.index[df1[i] == False]].loc[:, i:]
+                actual_df = DFPAX.iloc[df1.index[df1[i] == False]].loc[:, i:]
+
+                if len(my_variable_3) > 0:
+                    retained_column = pd.DataFrame(DFDSS.iloc[df1.index[df1[i] == False]]) [my_variable_3[0]]
+
+                break
+        new_column_name = actual_df.columns[0]
+        error_df.insert (1, new_column_name+ '_test', actual_df[new_column_name])
+
+        if len(my_variable_3) > 0:
+            error_df.insert(0, my_variable_3[0]+ ' (primarykey)', retained_column)
+
+        result_df = error_df
 
 
 
