@@ -1,46 +1,92 @@
 import paramiko
 import pandas as pd
-from io import StringIO
+import getpass
 
-# === Config ===
-hostname = 'your.server.ip.address'     # IP or hostname of the Hive server
-port = 22                               # default SSH port
-username = 'your_ssh_username'
-password = 'your_ssh_password'
+# Function to establish SSH connection
+def establish_ssh_connection(host, user, password, port):
+    try:
+        ssh_client = paramiko.SSHClient()
+        ssh_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+        ssh_client.connect(host, port=port, username=user, password=password)
+        return ssh_client
+    except Exception as e:
+        print(f"❌ Connection failed: {e}")
+        return None
 
-# Hive query to run
-hive_query = "SELECT * FROM your_database.your_table LIMIT 10;"
+# Function to run Beeline query
+def run_beeline_query(ssh_client, query):
+    try:
+        query_file_path = "/tmp/query_script.sql"
 
-# === Connect via SSH and run Hive query ===
-try:
-    # Set up SSH client
-    client = paramiko.SSHClient()
-    client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-    client.connect(hostname, port=port, username=username, password=password)
+        # Write query to file on remote server
+        sftp = ssh_client.open_sftp()
+        with sftp.open(query_file_path, "w") as query_file:
+            query_file.write(query)
+        sftp.close()
 
-    # Run Hive command
-    hive_command = f"hive -e \"{hive_query}\""
-    stdin, stdout, stderr = client.exec_command(hive_command)
+        # Run Beeline with query script
+        beeline_cmd = f'beeline -n {ssh_client.get_transport().get_username()} --outputformat=tsv2 -f {query_file_path}'
+        stdin, stdout, stderr = ssh_client.exec_command(beeline_cmd)
 
-    # Get output and error
-    output = stdout.read().decode()
-    error = stderr.read().decode()
+        output = stdout.read().decode()
+        error = stderr.read().decode()
 
-    if error:
-        print("Error running Hive query:", error)
-    else:
-        # Convert output to DataFrame
-        lines = output.strip().split('\n')
-        header = lines[0].split('\t')
-        data = [line.split('\t') for line in lines[1:]]
+        if error:
+            print(f"❌ Beeline Error:\n{error}")
+            return None
 
-        df = pd.DataFrame(data, columns=header)
+        # Parse output into DataFrame
+        lines = output.strip().split("\n")
+        if len(lines) < 2:
+            print("⚠️ No data returned from query.")
+            return None
+
+        headers = lines[0].split("\t")
+        data = [line.split("\t") for line in lines[1:] if line]
+        df = pd.DataFrame(data, columns=headers)
+
+        # Clean up query file
+        ssh_client.exec_command(f"rm {query_file_path}")
+
+        return df
+
+    except Exception as e:
+        print(f"❌ Error executing query: {e}")
+        return None
+
+# Main CLI-style logic
+def main():
+    print("🔐 SSH to Hive Server")
+
+    ssh_host = input("SSH Host: ").strip()
+    ssh_user = input("SSH Username: ").strip()
+    ssh_password = getpass.getpass("SSH Password: ")
+    ssh_port_input = input("SSH Port (default 22): ").strip()
+    ssh_port = int(ssh_port_input) if ssh_port_input else 22
+
+    ssh_client = establish_ssh_connection(ssh_host, ssh_user, ssh_password, ssh_port)
+
+    if not ssh_client:
+        return
+
+    print("✅ SSH Connection Established")
+
+    query = input("\n📥 Enter your Hive query (end with a semicolon `;`):\n> ").strip()
+
+    df = run_beeline_query(ssh_client, query)
+
+    if df is not None:
+        print("\n📊 Query Results:")
         print(df)
+    else:
+        print("⚠️ Query returned no results or failed.")
 
-except Exception as e:
-    print("SSH or Hive execution failed:", str(e))
-finally:
-    client.close()
+    ssh_client.close()
+    print("🔒 SSH connection closed.")
+
+if __name__ == "__main__":
+    main()
+
 
 
 --------------
