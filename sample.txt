@@ -1,16 +1,43 @@
-	  
-	  When PRTY_TYPE_CD = 'I'
-1. If PROFILE_ID is not null, use PROFILE_ID to join to SRC_KEY2 in C_PSEUDO_PRTY (where DATA_SRC = 'ICM' and SOURCE_COUNTRY_CODE = 'ID') and load CONCAT (DATA_SRC, '-', SOURCE_COUNTRY_CODE, '-',PSEUDO_KEY) as ENTRP_PRTY_SROGT_ID
-2. If PROFILE_ID is null, then ENTRP_PRTY_SROGT_ID = null
+import paramiko
+import pandas as pd
+from io import StringIO
 
-When PRTY_TYPE_CD <> 'I', sort record by MAST_OPEN_DT descending, DOM_MAST_REF and LE_ID, and group record by PRTY_SROGT_ID:
-1. If all records have DOM_MAST_REF as null, then load ENTRP_PRTY_SROGT_ID = null
-2. If DOM_MAST_REF is not null, select the record with latest MAST_OPEN_DT and LE_ID not null,
-       - use CONCAT(TRIM(LE_ID), '-', TRIM(SP_ID)) to join to SRC_KEY1 in  C_PSEUDO_PRTY (where DATA_SRC = 'SCI' and SOURCE_COUNTRY_CODE = 'XX') and load  CONCAT (DATA_SRC, '-', SOURCE_COUNTRY_CODE, '-',PSEUDO_KEY) as ENTRP_PRTY_SROGT_ID.
-       - if all records have null LE_ID then ENTRP_PRTY_SROGT_ID = null	   
-3. If WEP.CLIENTID IS NULL, select the record with latest MAST_OPEN_DT and LE_ID not null,
-       - use CONCAT(TRIM(LE_ID), '-', TRIM(SP_ID)) to join to SRC_KEY1 in  C_PSEUDO_PRTY (where DATA_SRC = 'SCI' and SOURCE_COUNTRY_CODE = 'XX') and load  CONCAT (DATA_SRC, '-', SOURCE_COUNTRY_CODE, '-',PSEUDO_KEY) as ENTRP_PRTY_SROGT_ID.
-       - if all records have null LE_ID then ENTRP_PRTY_SROGT_ID = null	  
+# === Config ===
+hostname = 'your.server.ip.address'     # IP or hostname of the Hive server
+port = 22                               # default SSH port
+username = 'your_ssh_username'
+password = 'your_ssh_password'
 
+# Hive query to run
+hive_query = "SELECT * FROM your_database.your_table LIMIT 10;"
 
----------------------------------------------------------
+# === Connect via SSH and run Hive query ===
+try:
+    # Set up SSH client
+    client = paramiko.SSHClient()
+    client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+    client.connect(hostname, port=port, username=username, password=password)
+
+    # Run Hive command
+    hive_command = f"hive -e \"{hive_query}\""
+    stdin, stdout, stderr = client.exec_command(hive_command)
+
+    # Get output and error
+    output = stdout.read().decode()
+    error = stderr.read().decode()
+
+    if error:
+        print("Error running Hive query:", error)
+    else:
+        # Convert output to DataFrame
+        lines = output.strip().split('\n')
+        header = lines[0].split('\t')
+        data = [line.split('\t') for line in lines[1:]]
+
+        df = pd.DataFrame(data, columns=header)
+        print(df)
+
+except Exception as e:
+    print("SSH or Hive execution failed:", str(e))
+finally:
+    client.close()
