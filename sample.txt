@@ -1,24 +1,117 @@
-0: jdbc:hive2://hkimou0gbe20a00.hk.standardch> select * from uat1_tb_dhub_gstg_active.sci_all_bkgloc limit 5;
-INFO  : Compiling command(queryId=hive_20251014020521_b9911a72-3f24-448d-8239-ed07e0120855): select * from uat1_tb_dhub_gstg_active.sci_all_bkgloc limit 5
-INFO  : No Stats for uat1_tb_dhub_gstg_active@sci_all_bkgloc, Columns: bkl_sys_gen_bkg_loctn_id, s_starttime, bkg_loctn_instrc_chk_ind, upd_count, bkl_bkg_loctn_orgn_val, bkl_cntry_iso_cd, rowid, bkg_loctn_br_cd_chk_ind, s_endtime, s_enddt, s_deleted_flag, last_upd_user_id, create_dt, lock_ind, mkr_hub_loctn_val, chg_ind, lock_user_id, s_startdt, bkg_loctn_ext_sys_chk_ind, create_user_id, bkg_loctn_chk_ind, bkg_loctn_emp_cd_chk_ind, last_upd_dt, bkl_bkg_loctn_desc, upd_sts_ind, prgrs_sts_val, verify_user_id, mkr_hub_loctn_num, bkl_fnc_rpt_unit, prgrs_sts_num, bkl_bkg_loctn_orgn_num, verify_dt
-INFO  : Semantic Analysis Completed (retrial = false)
-INFO  : Created Hive schema: Schema(fieldSchemas:[FieldSchema(name:sci_all_bkgloc.rowid, type:string, comment:null), FieldSchema(name:sci_all_bkgloc.s_startdt, type:string, comment:null), FieldSchema(name:sci_all_bkgloc.s_starttime, type:string, comment:null), FieldSchema(name:sci_all_bkgloc.s_enddt, type:string, comment:null), FieldSchema(name:sci_all_bkgloc.s_endtime, type:string, comment:null), FieldSchema(name:sci_all_bkgloc.s_deleted_flag, type:string, comment:null), FieldSchema(name:sci_all_bkgloc.bkl_sys_gen_bkg_loctn_id, type:bigint, comment:null), FieldSchema(name:sci_all_bkgloc.bkl_cntry_iso_cd, type:varchar(2), comment:null), FieldSchema(name:sci_all_bkgloc.bkl_bkg_loctn_orgn_num, type:bigint, comment:null), FieldSchema(name:sci_all_bkgloc.bkl_bkg_loctn_orgn_val, type:varchar(10), comment:null), FieldSchema(name:sci_all_bkgloc.bkl_bkg_loctn_desc, type:varchar(100), comment:null), FieldSchema(name:sci_all_bkgloc.bkl_fnc_rpt_unit, type:varchar(5), comment:null), FieldSchema(name:sci_all_bkgloc.prgrs_sts_num, type:bigint, comment:null), FieldSchema(name:sci_all_bkgloc.prgrs_sts_val, type:varchar(10), comment:null), FieldSchema(name:sci_all_bkgloc.bkg_loctn_chk_ind, type:varchar(1), comment:null), FieldSchema(name:sci_all_bkgloc.bkg_loctn_instrc_chk_ind, type:varchar(1), comment:null), FieldSchema(name:sci_all_bkgloc.bkg_loctn_ext_sys_chk_ind, type:varchar(1), comment:null), FieldSchema(name:sci_all_bkgloc.bkg_loctn_emp_cd_chk_ind, type:varchar(1), comment:null), FieldSchema(name:sci_all_bkgloc.create_user_id, type:varchar(15), comment:null), FieldSchema(name:sci_all_bkgloc.last_upd_user_id, type:varchar(15), comment:null), FieldSchema(name:sci_all_bkgloc.verify_user_id, type:varchar(15), comment:null), FieldSchema(name:sci_all_bkgloc.create_dt, type:date, comment:null), FieldSchema(name:sci_all_bkgloc.last_upd_dt, type:date, comment:null), FieldSchema(name:sci_all_bkgloc.verify_dt, type:date, comment:null), FieldSchema(name:sci_all_bkgloc.upd_count, type:bigint, comment:null), FieldSchema(name:sci_all_bkgloc.upd_sts_ind, type:varchar(1), comment:null), FieldSchema(name:sci_all_bkgloc.lock_ind, type:varchar(1), comment:null), FieldSchema(name:sci_all_bkgloc.lock_user_id, type:varchar(15), comment:null), FieldSchema(name:sci_all_bkgloc.mkr_hub_loctn_num, type:bigint, comment:null), FieldSchema(name:sci_all_bkgloc.mkr_hub_loctn_val, type:varchar(10), comment:null), FieldSchema(name:sci_all_bkgloc.chg_ind, type:varchar(1), comment:null), FieldSchema(name:sci_all_bkgloc.bkg_loctn_br_cd_chk_ind, type:varchar(1), comment:null), FieldSchema(name:sci_all_bkgloc.ods, type:string, comment:null)], properties:null)
-INFO  : Completed compiling command(queryId=hive_20251014020521_b9911a72-3f24-448d-8239-ed07e0120855); Time taken: 0.044 seconds
-INFO  : Concurrency mode is disabled, not creating a lock manager
-INFO  : Executing command(queryId=hive_20251014020521_b9911a72-3f24-448d-8239-ed07e0120855): select * from uat1_tb_dhub_gstg_active.sci_all_bkgloc limit 5
-INFO  : Completed executing command(queryId=hive_20251014020521_b9911a72-3f24-448d-8239-ed07e0120855); Time taken: 0.001 seconds
-INFO  : OK
-+----------------------------------------------------+---------------------------+-----------------------------+-------------------------+---------------------------+--------------------------------+------------------------------------------+----------------------------------+----------------------------------------+----------------------------------------+------------------------------------+----------------------------------+-------------------------------+-------------------------------+-----------------------------------+------------------------------------------+-------------------------------------------+------------------------------------------+--------------------------------+----------------------------------+--------------------------------+---------------------------+-----------------------------+---------------------------+---------------------------+-----------------------------+--------------------------+------------------------------+-----------------------------------+-----------------------------------+-------------------------+-----------------------------------------+---------------------+
-|                sci_all_bkgloc.rowid                | sci_all_bkgloc.s_startdt  | sci_all_bkgloc.s_starttime  | sci_all_bkgloc.s_enddt  | sci_all_bkgloc.s_endtime  | sci_all_bkgloc.s_deleted_flag  | sci_all_bkgloc.bkl_sys_gen_bkg_loctn_id  | sci_all_bkgloc.bkl_cntry_iso_cd  | sci_all_bkgloc.bkl_bkg_loctn_orgn_num  | sci_all_bkgloc.bkl_bkg_loctn_orgn_val  | sci_all_bkgloc.bkl_bkg_loctn_desc  | sci_all_bkgloc.bkl_fnc_rpt_unit  | sci_all_bkgloc.prgrs_sts_num  | sci_all_bkgloc.prgrs_sts_val  | sci_all_bkgloc.bkg_loctn_chk_ind  | sci_all_bkgloc.bkg_loctn_instrc_chk_ind  | sci_all_bkgloc.bkg_loctn_ext_sys_chk_ind  | sci_all_bkgloc.bkg_loctn_emp_cd_chk_ind  | sci_all_bkgloc.create_user_id  | sci_all_bkgloc.last_upd_user_id  | sci_all_bkgloc.verify_user_id  | sci_all_bkgloc.create_dt  | sci_all_bkgloc.last_upd_dt  | sci_all_bkgloc.verify_dt  | sci_all_bkgloc.upd_count  | sci_all_bkgloc.upd_sts_ind  | sci_all_bkgloc.lock_ind  | sci_all_bkgloc.lock_user_id  | sci_all_bkgloc.mkr_hub_loctn_num  | sci_all_bkgloc.mkr_hub_loctn_val  | sci_all_bkgloc.chg_ind  | sci_all_bkgloc.bkg_loctn_br_cd_chk_ind  | sci_all_bkgloc.ods  |
-+----------------------------------------------------+---------------------------+-----------------------------+-------------------------+---------------------------+--------------------------------+------------------------------------------+----------------------------------+----------------------------------------+----------------------------------------+------------------------------------+----------------------------------+-------------------------------+-------------------------------+-----------------------------------+------------------------------------------+-------------------------------------------+------------------------------------------+--------------------------------+----------------------------------+--------------------------------+---------------------------+-----------------------------+---------------------------+---------------------------+-----------------------------+--------------------------+------------------------------+-----------------------------------+-----------------------------------+-------------------------+-----------------------------------------+---------------------+
-| 2020013110351600596_b7787e38-36ab-497f-99b2-41c1488c8a34 | 2020-01-30                | 2020-01-31 14:14:54         | 9999-12-31              | 9999-12-31 00:00:00       | 0                              | 13000084                                 | TH                               | 40                                     | SCNB                                   | SCNB THAILAND                      | NULL                             | 999                           | VERIFIED                      | N                                 | N                                        | N                                         | N                                        | SCIADM01                       | SCIADMIN                         | SCIADMIN                       | 2001-01-01                | 2002-05-23                  | 2002-05-23                | 3                         | U                           | N                        | KSRMKR02                     | NULL                              | NULL                              | N                       | N                                       | 2024-01-31          |
-| 2022033111441263938_7f4a02c3-23d7-41dc-9c71-165107a7ff6a | 2022-03-30                | 2022-03-31 14:45:06         | 9999-12-31              | 9999-12-31 00:00:00       | 0                              | 13000034                                 | IL                               | 40                                     | SCBL                                   | SCBL ISRAEL                        | NULL                             | 999                           | VERIFIED                      | N                                 | N                                        | N                                         | N                                        | SCIADM01                       | SCIADMIN                         | SCIADMIN                       | 2001-01-01                | 2002-05-23                  | 2002-05-23                | 3                         | U                           | N                        | KSRMKR02                     | NULL                              | NULL                              | N                       | N                                       | 2024-01-31          |
-| 2022072710595238885_33940ca3-1afa-4776-acbb-6392671793ce | 2022-07-26                | 2022-07-27 14:47:33         | 9999-12-31              | 9999-12-31 00:00:00       | 0                              | 13000012                                 | BR                               | 40                                     | SCBL                                   | SCBL BRAZIL                        | NULL                             | 999                           | VERIFIED                      | N                                 | N                                        | N                                         | N                                        | SCIADM01                       | SCIADMIN                         | SCIADMIN                       | 2001-01-01                | 2002-05-23                  | 2002-05-23                | 3                         | U                           | N                        | KSRMKR02                     | NULL                              | NULL                              | N                       | N                                       | 2024-01-31          |
-| 2022072710595238942_6353c09d-f8bc-4cf5-a95d-fb7358d58272 | 2022-07-26                | 2022-07-27 14:47:33         | 9999-12-31              | 9999-12-31 00:00:00       | 0                              | 13010046                                 | CO                               | 40                                     | SCBA                                   | SCBA COLOMBIA                      | NULL                             | 999                           | VERIFIED                      | N                                 | N                                        | N                                         | N                                        | BALMKR51                       | BALMKR51                         | SURVER01                       | 2004-04-06                | 2004-04-06                  | 2004-04-06                | 1                         | I                           | N                        | KSRMKR02                     | 801                               | SSCCHN                            | N                       | N                                       | 2024-01-31          |
-| 2022111010455554510_1ff5364c-8c17-4535-b5b1-df7c2d601032 | 2022-11-09                | 2022-11-10 15:01:57         | 9999-12-31              | 9999-12-31 00:00:00       | 0                              | 13010607                                 | TH                               | 40                                     | SCTH                                   | SCTH THAILAND                      | NULL                             | 999                           | VERIFIED                      | N                                 | N                                        | N                                         | N                                        | RSUMKR05                       | RSUMKR05                         | GBVRFR01                       | 2014-04-14                | 2014-04-14                  | 2014-04-14                | 1                         | I                           | N                        | JENARSTD01                   | 801                               | SSCCHN                            | N                       | N                                       | 2024-01-31          |
-+----------------------------------------------------+---------------------------+-----------------------------+-------------------------+---------------------------+--------------------------------+------------------------------------------+----------------------------------+----------------------------------------+----------------------------------------+------------------------------------+----------------------------------+-------------------------------+-------------------------------+-----------------------------------+------------------------------------------+-------------------------------------------+------------------------------------------+--------------------------------+----------------------------------+--------------------------------+---------------------------+-----------------------------+---------------------------+---------------------------+-----------------------------+--------------------------+------------------------------+-----------------------------------+-----------------------------------+-------------------------+-----------------------------------------+---------------------+
-5 rows selected (0.106 seconds)
-0: jdbc:hive2://hkimou0gbe20a00.hk.standardch>
+import paramiko
+import pandas as pd
+import getpass
+
+def establish_ssh_connection(host, user, password, port=22):
+    try:
+        ssh = paramiko.SSHClient()
+        ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+        ssh.connect(host, port=port, username=user, password=password)
+        return ssh
+    except Exception as e:
+        print(f"Connection error: {e}")
+        return None
+
+def extract_table_from_beeline_output(output_lines):
+    table_started = False
+    headers = []
+    data = []
+    for line in output_lines:
+        line = line.strip()
+
+        # Detect start of table
+        if not table_started:
+            if line.startswith('+') and '|' in line:
+                table_started = True
+                continue  # skip border line
+
+        elif table_started:
+            if line.startswith('+'):
+                continue  # skip separator lines
+
+            if line.startswith('|') and line.endswith('|'):
+                columns = [col.strip() for col in line.strip('|').split('|')]
+                if not headers:
+                    headers = columns  # first row after +---+ is header
+                else:
+                    data.append(columns)
+            else:
+                # Table ended
+                break
+
+    if headers and data:
+        return pd.DataFrame(data, columns=headers)
+    else:
+        return None
+
+def run_beeline_query(ssh_client, query):
+    query_file = "/tmp/query_script.sql"
+
+    # Write query to file
+    sftp = ssh_client.open_sftp()
+    with sftp.open(query_file, "w") as f:
+        f.write(query)
+    sftp.close()
+
+    # Execute query
+    cmd = f'beeline -n {ssh_client.get_transport().get_username()} -f {query_file}'
+    stdin, stdout, stderr = ssh_client.exec_command(cmd)
+
+    # Read outputs
+    output = stdout.read().decode("utf-8", errors="ignore")
+    error = stderr.read().decode("utf-8", errors="ignore")
+
+    # Print stderr for debug
+    if error.strip():
+        print("⚠️ STDERR:")
+        print(error)
+
+    output_lines = output.strip().splitlines()
+
+    # Parse table from Beeline output
+    df = extract_table_from_beeline_output(output_lines)
+
+    # Cleanup
+    ssh_client.exec_command(f"rm {query_file}")
+
+    return df
+
+def main():
+    print("🔐 SSH to Hive Server")
+    host = input("Host: ").strip()
+    user = input("Username: ").strip()
+    password = getpass.getpass("Password: ")
+    port = 22
+
+    ssh_client = establish_ssh_connection(host, user, password, port)
+    if not ssh_client:
+        return
+
+    print("✅ Connected.")
+
+    print("\n📥 Enter Hive query (end with semicolon `;`):")
+    query_lines = []
+    while True:
+        line = input()
+        query_lines.append(line)
+        if line.strip().endswith(';'):
+            break
+    query = "\n".join(query_lines)
+
+    df = run_beeline_query(ssh_client, query)
+
+    if df is not None:
+        print("\n📊 Query Result:")
+        print(df.to_string(index=False))
+    else:
+        print("⚠️ Could not extract table data.")
+
+    ssh_client.close()
+    print("🔒 Connection closed.")
+
+if __name__ == "__main__":
+    main()
+
 
 
 
