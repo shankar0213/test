@@ -1,68 +1,26 @@
-def run_beeline_query(ssh_client, query):
-    try:
-        query_file_path = "/tmp/query_script.sql"
+🔒 SSH connection closed.
+PS C:\Users\8199095\Music> venv\Scripts\python.exe test1.py
+🔐 SSH to Hive Server
+✅ SSH Connection Established
 
-        hive_settings = """\
-set hive.cli.print.header=true;
-set hive.fetch.task.conversion=none;
-set hive.optimize.skewjoin=false;
-set hive.limit.optimize.enable=false;
-set hive.support.quoted.identifiers=none;
-"""
-        full_query = hive_settings + "\n" + query
+📥 Enter your Hive query (end with a semicolon `;`):
+select * from uat1_tb_dhub_gstg_active.sci_all_bkgloc limit 5;
+⚠️ Beeline stderr output:
+SLF4J: Class path contains multiple SLF4J bindings.
+SLF4J: Found binding in [jar:file:/opt/cloudera/parcels/CDH-7.1.9-1.cdh7.1.9.p1045.67903105/jars/log4j-slf4j-impl-2.18.0.jar!/org/slf4j/impl/StaticLoggerBinder.class]
+SLF4J: Found binding in [jar:file:/opt/cloudera/parcels/CDH-7.1.9-1.cdh7.1.9.p1045.67903105/jars/slf4j-reload4j-1.7.36.jar!/org/slf4j/impl/StaticLoggerBinder.class]
+SLF4J: See http://www.slf4j.org/codes.html#multiple_bindings for an explanation.
+SLF4J: Actual binding is of type [org.apache.logging.slf4j.Log4jLoggerFactory]
+WARNING: Use "yarn jar" to launch YARN applications.
+SLF4J: Class path contains multiple SLF4J bindings.
+SLF4J: Found binding in [jar:file:/opt/cloudera/parcels/CDH-7.1.9-1.cdh7.1.9.p1045.67903105/jars/log4j-slf4j-impl-2.18.0.jar!/org/slf4j/impl/StaticLoggerBinder.class]
+SLF4J: Found binding in [jar:file:/opt/cloudera/parcels/CDH-7.1.9-1.cdh7.1.9.p1045.67903105/jars/slf4j-reload4j-1.7.36.jar!/org/slf4j/impl/StaticLoggerBinder.class]
+SLF4J: See http://www.slf4j.org/codes.html#multiple_bindings for an explanation.
+SLF4J: Actual binding is of type [org.apache.logging.slf4j.Log4jLoggerFactory]
 
-        sftp = ssh_client.open_sftp()
-        with sftp.open(query_file_path, "w") as f:
-            f.write(full_query)
-        sftp.close()
-
-        beeline_cmd = (
-            f"beeline -S --outputformat=tsv2 --verbose=false --silent=true "
-            f"-n {ssh_client.get_transport().get_username()} -f {query_file_path}"
-        )
-
-        stdin, stdout, stderr = ssh_client.exec_command(beeline_cmd)
-
-        output = stdout.read().decode()
-        error = stderr.read().decode()
-
-        if error.strip():
-            print(f"⚠️ Beeline stderr output:\n{error}")
-
-        lines = output.strip().split('\n')
-
-        # Find header line index by detecting the first line with tabs (assuming headers contain tabs)
-        header_idx = None
-        for i, line in enumerate(lines):
-            # Heuristic: header line often has tabs and no empty fields
-            if '\t' in line and all(field.strip() != '' for field in line.split('\t')):
-                header_idx = i
-                break
-
-        if header_idx is None:
-            print("⚠️ Could not find header row in output.")
-            return None
-
-        headers = lines[header_idx].split('\t')
-        data_lines = lines[header_idx+1:]
-
-        data = [line.split('\t') for line in data_lines if line.strip()]
-
-        if not data:
-            print("⚠️ No data rows found after header.")
-            return None
-
-        df = pd.DataFrame(data, columns=headers)
-
-        ssh_client.exec_command(f"rm {query_file_path}")
-
-        return df
-
-    except Exception as e:
-        print(f"❌ Error executing query: {e}")
-        return None
-
-
+⚠️ Could not find header row in output.
+⚠️ Query returned no results or failed.
+🔒 SSH connection closed.
 
 
 
