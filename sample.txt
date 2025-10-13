@@ -1,3 +1,6 @@
+beeline_cmd = f'beeline --incremental=true --outputformat=tsv2 --maxRows=1000000 -n {ssh_client.get_transport().get_username()} -f {query_file_path}'
+
+
 import paramiko
 import pandas as pd
 import getpass
