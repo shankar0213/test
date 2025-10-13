@@ -1,113 +1,82 @@
 import paramiko
 import pandas as pd
-import getpass
 
+# Function to establish SSH connection
 def establish_ssh_connection(host, user, password, port=22):
     try:
-        ssh = paramiko.SSHClient()
-        ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-        ssh.connect(host, port=port, username=user, password=password)
-        return ssh
+        ssh_client = paramiko.SSHClient()
+        ssh_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+        ssh_client.connect(host, port=port, username=user, password=password)
+        print("✅ SSH Connection Established")
+        return ssh_client
     except Exception as e:
-        print(f"Connection error: {e}")
+        print(f"❌ SSH connection failed: {e}")
         return None
 
-def extract_table_from_beeline_output(output_lines):
-    table_started = False
-    headers = []
-    data = []
-    for line in output_lines:
-        line = line.strip()
+# Function to run Beeline query and download result as CSV
+def run_beeline_and_download_csv(ssh_client, query, remote_csv="/tmp/hive_output.csv", local_csv="hive_output.csv"):
+    try:
+        username = ssh_client.get_transport().get_username()
 
-        # Detect start of table
-        if not table_started:
-            if line.startswith('+') and '|' in line:
-                table_started = True
-                continue  # skip border line
+        # Build the Beeline command
+        beeline_cmd = f'beeline -n {username} --outputformat=csv2 -e "{query}" > {remote_csv}'
 
-        elif table_started:
-            if line.startswith('+'):
-                continue  # skip separator lines
+        # Run Beeline remotely
+        stdin, stdout, stderr = ssh_client.exec_command(beeline_cmd)
+        exit_status = stdout.channel.recv_exit_status()
 
-            if line.startswith('|') and line.endswith('|'):
-                columns = [col.strip() for col in line.strip('|').split('|')]
-                if not headers:
-                    headers = columns  # first row after +---+ is header
-                else:
-                    data.append(columns)
-            else:
-                # Table ended
-                break
+        error = stderr.read().decode().strip()
+        if exit_status != 0 or "ERROR" in error.upper():
+            print(f"⚠️ Beeline failed:\n{error}")
+            return None
 
-    if headers and data:
-        return pd.DataFrame(data, columns=headers)
-    else:
+        # Download the file via SFTP
+        sftp = ssh_client.open_sftp()
+        sftp.get(remote_csv, local_csv)
+        sftp.remove(remote_csv)
+        sftp.close()
+
+        print(f"📥 Downloaded CSV to: {local_csv}")
+        return local_csv
+
+    except Exception as e:
+        print(f"❌ Error during Beeline or download: {e}")
         return None
 
-def run_beeline_query(ssh_client, query):
-    query_file = "/tmp/query_script.sql"
-
-    # Write query to file
-    sftp = ssh_client.open_sftp()
-    with sftp.open(query_file, "w") as f:
-        f.write(query)
-    sftp.close()
-
-    # Execute query
-    cmd = f'beeline -n {ssh_client.get_transport().get_username()} -f {query_file}'
-    stdin, stdout, stderr = ssh_client.exec_command(cmd)
-
-    # Read outputs
-    output = stdout.read().decode("utf-8", errors="ignore")
-    error = stderr.read().decode("utf-8", errors="ignore")
-
-    # Print stderr for debug
-    if error.strip():
-        print("⚠️ STDERR:")
-        print(error)
-
-    output_lines = output.strip().splitlines()
-
-    # Parse table from Beeline output
-    df = extract_table_from_beeline_output(output_lines)
-
-    # Cleanup
-    ssh_client.exec_command(f"rm {query_file}")
-
-    return df
-
+# Main script logic
 def main():
     print("🔐 SSH to Hive Server")
-    host = input("Host: ").strip()
-    user = input("Username: ").strip()
-    password = getpass.getpass("Password: ")
-    port = 22
 
-    ssh_client = establish_ssh_connection(host, user, password, port)
+    # --- SSH DETAILS ---
+    ssh_host = input("Hostname/IP: ").strip()
+    ssh_user = input("Username: ").strip()
+    ssh_password = input("Password: ").strip()
+    ssh_port = 22  # Or customize if needed
+
+    # Connect via SSH
+    ssh_client = establish_ssh_connection(ssh_host, ssh_user, ssh_password, ssh_port)
     if not ssh_client:
         return
 
-    print("✅ Connected.")
+    # --- QUERY INPUT ---
+    print("\n📥 Enter your Hive query (end with a semicolon `;`):")
+    query = input().strip()
 
-    print("\n📥 Enter Hive query (end with semicolon `;`):")
-    query_lines = []
-    while True:
-        line = input()
-        query_lines.append(line)
-        if line.strip().endswith(';'):
-            break
-    query = "\n".join(query_lines)
+    # Run Beeline and get CSV
+    local_csv_path = run_beeline_and_download_csv(ssh_client, query)
 
-    df = run_beeline_query(ssh_client, query)
+    # Load into pandas DataFrame
+    if local_csv_path:
+        try:
+            df = pd.read_csv(local_csv_path)
+            print("\n📊 Query Results:")
+            print(df)
+        except Exception as e:
+            print(f"❌ Failed to read CSV: {e}")
 
-    if df is not None:
-        print("\n📊 Query Result:")
-        print(df.to_string(index=False))
-    else:
-        print("⚠️ Could not extract table data.")
-
+    # Close SSH
     ssh_client.close()
-    print("🔒 Connection closed.")
+    print("🔒 SSH connection closed.")
 
 if __name__ == "__main__":
     main()
