@@ -1,22 +1,7 @@
-import paramiko
-import pandas as pd
-import getpass
-
-def establish_ssh_connection(host, user, password, port):
-    try:
-        ssh_client = paramiko.SSHClient()
-        ssh_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-        ssh_client.connect(host, port=port, username=user, password=password)
-        return ssh_client
-    except Exception as e:
-        print(f"❌ Connection failed: {e}")
-        return None
-
 def run_beeline_query(ssh_client, query):
     try:
         query_file_path = "/tmp/query_script.sql"
 
-        # Prepend Hive settings to disable limits & extra logs
         hive_settings = """\
 set hive.cli.print.header=true;
 set hive.fetch.task.conversion=none;
@@ -26,13 +11,11 @@ set hive.support.quoted.identifiers=none;
 """
         full_query = hive_settings + "\n" + query
 
-        # Write query file to remote server
         sftp = ssh_client.open_sftp()
         with sftp.open(query_file_path, "w") as f:
             f.write(full_query)
         sftp.close()
 
-        # Run beeline silently with TSV output
         beeline_cmd = (
             f"beeline -S --outputformat=tsv2 --verbose=false --silent=true "
             f"-n {ssh_client.get_transport().get_username()} -f {query_file_path}"
@@ -47,17 +30,30 @@ set hive.support.quoted.identifiers=none;
             print(f"⚠️ Beeline stderr output:\n{error}")
 
         lines = output.strip().split('\n')
-        if len(lines) < 2:
-            print("⚠️ No data returned from query.")
+
+        # Find header line index by detecting the first line with tabs (assuming headers contain tabs)
+        header_idx = None
+        for i, line in enumerate(lines):
+            # Heuristic: header line often has tabs and no empty fields
+            if '\t' in line and all(field.strip() != '' for field in line.split('\t')):
+                header_idx = i
+                break
+
+        if header_idx is None:
+            print("⚠️ Could not find header row in output.")
             return None
 
-        # Optionally, detect header row dynamically
-        headers = lines[0].split('\t')
-        data = [line.split('\t') for line in lines[1:] if line]
+        headers = lines[header_idx].split('\t')
+        data_lines = lines[header_idx+1:]
+
+        data = [line.split('\t') for line in data_lines if line.strip()]
+
+        if not data:
+            print("⚠️ No data rows found after header.")
+            return None
 
         df = pd.DataFrame(data, columns=headers)
 
-        # Clean up query file
         ssh_client.exec_command(f"rm {query_file_path}")
 
         return df
@@ -66,43 +62,6 @@ set hive.support.quoted.identifiers=none;
         print(f"❌ Error executing query: {e}")
         return None
 
-def main():
-    print("🔐 SSH to Hive Server")
-
-    ssh_host = input("SSH Host: ").strip()
-    ssh_user = input("SSH Username: ").strip()
-    ssh_password = getpass.getpass("SSH Password: ")
-    ssh_port_input = input("SSH Port (default 22): ").strip()
-    ssh_port = int(ssh_port_input) if ssh_port_input else 22
-
-    ssh_client = establish_ssh_connection(ssh_host, ssh_user, ssh_password, ssh_port)
-    if not ssh_client:
-        return
-
-    print("✅ SSH Connection Established")
-
-    print("\n📥 Enter your Hive query (end with a semicolon `;`):")
-    query_lines = []
-    while True:
-        line = input()
-        if line.strip().endswith(';'):
-            query_lines.append(line)
-            break
-        query_lines.append(line)
-    query = "\n".join(query_lines)
-
-    df = run_beeline_query(ssh_client, query)
-    if df is not None:
-        print("\n📊 Query Results:")
-        print(df.to_string(index=False))
-    else:
-        print("⚠️ Query returned no results or failed.")
-
-    ssh_client.close()
-    print("🔒 SSH connection closed.")
-
-if __name__ == "__main__":
-    main()
 
 
 
