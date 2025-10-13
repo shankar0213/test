@@ -1,60 +1,3 @@
-
-def run_beeline_query(ssh_client, query):
-    try:
-        query_file_path = "/tmp/query_script.sql"
-        
-        # Add Hive configs + actual query
-        full_query = """\
-set hive.cli.print.header=true;
-set hive.fetch.task.conversion=none;
-set hive.optimize.skewjoin=false;
-set hive.limit.optimize.enable=false;
-set hive.support.quoted.identifiers=none;
-""" + "\n" + query
-        
-        sftp = ssh_client.open_sftp()
-        with sftp.open(query_file_path, "w") as query_file:
-            query_file.write(full_query)
-        sftp.close()
-
-        beeline_cmd = (
-            f"beeline -S --outputformat=tsv2 --verbose=false --silent=true "
-            f"-n {ssh_client.get_transport().get_username()} -f {query_file_path}"
-        )
-        
-        stdin, stdout, stderr = ssh_client.exec_command(beeline_cmd)
-        
-        output = stdout.read().decode()
-        error = stderr.read().decode()
-
-        if error.strip():
-            print(f"❌ Beeline Error:\n{error}")
-            # Sometimes warnings/errors come in stderr but don't prevent results
-            # You may want to comment out return None to still parse output
-            # return None
-
-        lines = output.strip().split('\n')
-        if len(lines) < 2:
-            print("⚠️ No data returned from query.")
-            return None
-
-        headers = lines[0].split('\t')
-        data = [line.split('\t') for line in lines[1:] if line]
-
-        df = pd.DataFrame(data, columns=headers)
-
-        ssh_client.exec_command(f"rm {query_file_path}")
-
-        return df
-
-    except Exception as e:
-        print(f"❌ Error executing query: {e}")
-        return None
-
------------
-
-beeline_cmd = f'beeline --incremental=true --outputformat=tsv2 --maxRows=1000000 -n {ssh_client.get_transport().get_username()} -f {query_file_path}'
-
 import paramiko
 import pandas as pd
 import getpass
@@ -73,34 +16,48 @@ def run_beeline_query(ssh_client, query):
     try:
         query_file_path = "/tmp/query_script.sql"
 
-        # Write query to remote file
+        # Prepend Hive settings to disable limits & extra logs
+        hive_settings = """\
+set hive.cli.print.header=true;
+set hive.fetch.task.conversion=none;
+set hive.optimize.skewjoin=false;
+set hive.limit.optimize.enable=false;
+set hive.support.quoted.identifiers=none;
+"""
+        full_query = hive_settings + "\n" + query
+
+        # Write query file to remote server
         sftp = ssh_client.open_sftp()
-        with sftp.open(query_file_path, "w") as query_file:
-            query_file.write(query)
+        with sftp.open(query_file_path, "w") as f:
+            f.write(full_query)
         sftp.close()
 
-        # Run beeline with silent mode and TSV output
-        beeline_cmd = f'beeline -S --outputformat=tsv2 -n {ssh_client.get_transport().get_username()} -f {query_file_path}'
+        # Run beeline silently with TSV output
+        beeline_cmd = (
+            f"beeline -S --outputformat=tsv2 --verbose=false --silent=true "
+            f"-n {ssh_client.get_transport().get_username()} -f {query_file_path}"
+        )
+
         stdin, stdout, stderr = ssh_client.exec_command(beeline_cmd)
 
         output = stdout.read().decode()
         error = stderr.read().decode()
 
         if error.strip():
-            print(f"❌ Beeline Error:\n{error}")
-            return None
+            print(f"⚠️ Beeline stderr output:\n{error}")
 
         lines = output.strip().split('\n')
         if len(lines) < 2:
             print("⚠️ No data returned from query.")
             return None
 
+        # Optionally, detect header row dynamically
         headers = lines[0].split('\t')
         data = [line.split('\t') for line in lines[1:] if line]
 
         df = pd.DataFrame(data, columns=headers)
 
-        # Clean up remote query file
+        # Clean up query file
         ssh_client.exec_command(f"rm {query_file_path}")
 
         return df
@@ -119,16 +76,22 @@ def main():
     ssh_port = int(ssh_port_input) if ssh_port_input else 22
 
     ssh_client = establish_ssh_connection(ssh_host, ssh_user, ssh_password, ssh_port)
-
     if not ssh_client:
         return
 
     print("✅ SSH Connection Established")
 
-    query = input("\n📥 Enter your Hive query (end with a semicolon `;`):\n> ").strip()
+    print("\n📥 Enter your Hive query (end with a semicolon `;`):")
+    query_lines = []
+    while True:
+        line = input()
+        if line.strip().endswith(';'):
+            query_lines.append(line)
+            break
+        query_lines.append(line)
+    query = "\n".join(query_lines)
 
     df = run_beeline_query(ssh_client, query)
-
     if df is not None:
         print("\n📊 Query Results:")
         print(df.to_string(index=False))
@@ -140,6 +103,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
