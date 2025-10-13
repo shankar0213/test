@@ -1,11 +1,9 @@
 beeline_cmd = f'beeline --incremental=true --outputformat=tsv2 --maxRows=1000000 -n {ssh_client.get_transport().get_username()} -f {query_file_path}'
 
-
 import paramiko
 import pandas as pd
 import getpass
 
-# Function to establish SSH connection
 def establish_ssh_connection(host, user, password, port):
     try:
         ssh_client = paramiko.SSHClient()
@@ -16,39 +14,38 @@ def establish_ssh_connection(host, user, password, port):
         print(f"❌ Connection failed: {e}")
         return None
 
-# Function to run Beeline query
 def run_beeline_query(ssh_client, query):
     try:
         query_file_path = "/tmp/query_script.sql"
 
-        # Write query to file on remote server
+        # Write query to remote file
         sftp = ssh_client.open_sftp()
         with sftp.open(query_file_path, "w") as query_file:
             query_file.write(query)
         sftp.close()
 
-        # Run Beeline with query script
-        beeline_cmd = f'beeline -n {ssh_client.get_transport().get_username()} --outputformat=tsv2 -f {query_file_path}'
+        # Run beeline with silent mode and TSV output
+        beeline_cmd = f'beeline -S --outputformat=tsv2 -n {ssh_client.get_transport().get_username()} -f {query_file_path}'
         stdin, stdout, stderr = ssh_client.exec_command(beeline_cmd)
 
         output = stdout.read().decode()
         error = stderr.read().decode()
 
-        if error:
+        if error.strip():
             print(f"❌ Beeline Error:\n{error}")
             return None
 
-        # Parse output into DataFrame
-        lines = output.strip().split("\n")
+        lines = output.strip().split('\n')
         if len(lines) < 2:
             print("⚠️ No data returned from query.")
             return None
 
-        headers = lines[0].split("\t")
-        data = [line.split("\t") for line in lines[1:] if line]
+        headers = lines[0].split('\t')
+        data = [line.split('\t') for line in lines[1:] if line]
+
         df = pd.DataFrame(data, columns=headers)
 
-        # Clean up query file
+        # Clean up remote query file
         ssh_client.exec_command(f"rm {query_file_path}")
 
         return df
@@ -57,7 +54,6 @@ def run_beeline_query(ssh_client, query):
         print(f"❌ Error executing query: {e}")
         return None
 
-# Main CLI-style logic
 def main():
     print("🔐 SSH to Hive Server")
 
@@ -80,7 +76,7 @@ def main():
 
     if df is not None:
         print("\n📊 Query Results:")
-        print(df)
+        print(df.to_string(index=False))
     else:
         print("⚠️ Query returned no results or failed.")
 
