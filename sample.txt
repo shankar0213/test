@@ -90,6 +90,13 @@ if __name__ == "__main__":
 
 
 --------------
-py 11 ---> venv
-venv\Scripts\pip.exe install pandas --trusted-host pypi.org --trusted-host files.pythonhosted.org --trusted-host pypi.python.org
+py 11
+
+PS C:\Users\bankid\Music> venv\Scripts\python.exe -c "import platform; print(platform.python_version()); print(platform.architecture())"
+
+
+PS C:\Users\bankid\Music> py -3.11 -m venv venv
+   
+PS C:\Users\bankid\Music> venv\Scripts\pip.exe install pandas --trusted-host pypi.org --trusted-host files.pythonhosted.org --trusted-host pypi.python.org
+PS C:\Users\bankid\Music> venv\Scripts\python.exe test1.py
 
