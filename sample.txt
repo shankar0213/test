@@ -1,4 +1,129 @@
+SELECT COUNT(*) 
+FROM (
+    SELECT
+        WEP.PRTY_SROGT_ID AS PRTY_SROGT_ID,
+        WEP.DOM_PRTY_REF AS DOM_PRTY_REF,
 
+        CASE 
+            WHEN TRIM(WPS.PROFILE_ID) IS NOT NULL AND TRIM(WPS.PROFILE_ID) != '' 
+                THEN CONCAT(WPS.DATA_SRC_ICM, '-', WPS.SOURCE_COUNTRY_CODE_ICM, '-', WPS.PSEUDO_KEY)
+            ELSE NULL 
+        END AS ENTRP_PRTY_SROGT_ID,
+        
+        CASE 
+            WHEN TRIM(WPS.PROFILE_ID) IS NOT NULL AND TRIM(WPS.PROFILE_ID) != '' 
+                THEN WPS.PROFILE_ID
+            ELSE NULL 
+        END AS ENTRP_PRTY_REF,
+
+        CASE 
+            WHEN WEP.PRTY_TYPE_CD = 'I' THEN NULL
+            WHEN WEP.PRTY_TYPE_CD <> 'I' THEN 
+                CASE 
+                    WHEN (WEP.DOM_MAST_REF IS NULL OR WEP.DOM_MAST_REF = '') THEN NULL
+                    WHEN WEP.DOM_MAST_REF IS NOT NULL THEN 
+                        CASE 
+                            WHEN TRIM(WEP.CLIENTID) IS NOT NULL AND TRIM(WEP.CLIENTID) != '' 
+                                THEN CONCAT('DCB', '-', 'XX-', TRIM(WEP.CLIENTID)) 
+                            WHEN TRIM(WEP.CLIENTID) IS NULL OR TRIM(WEP.CLIENTID) = '' 
+                                THEN CONCAT('SCI', '-', 'XX-', TRIM(WEP.LE_ID)) 
+                            ELSE NULL
+                        END
+                    WHEN WEP.LE_ID IS NULL THEN NULL
+                    ELSE NULL 
+                END
+            ELSE NULL 
+        END AS ENTRP_PARNT_PRTY_SROGT_ID,
+
+        CASE 
+            WHEN WEP.PRTY_TYPE_CD = 'I' THEN NULL
+            WHEN WEP.PRTY_TYPE_CD <> 'I' THEN 
+                CASE 
+                    WHEN (WEP.DOM_MAST_REF IS NULL OR WEP.DOM_MAST_REF = '') THEN NULL
+                    WHEN WEP.DOM_MAST_REF IS NOT NULL THEN TRIM(WEP.CLIENTID)
+                    WHEN (TRIM(WEP.CLIENTID) IS NULL OR TRIM(WEP.CLIENTID) = '') 
+                         AND (TRIM(WEP.LE_ID) IS NOT NULL AND TRIM(WEP.LE_ID) != '') 
+                         THEN CONCAT(TRIM(WEP.LE_ID), '-', TRIM(WEP.SP_ID))
+                    WHEN WEP.LE_ID IS NULL THEN NULL
+                    ELSE NULL 
+                END
+            ELSE NULL
+        END AS ENTRP_PARNT_PRTY_HOST_NUM,
+
+        TRIM(WPS.DOM_MAST_REF) AS DOM_MAST_REF,
+
+        CASE 
+            WHEN TRIM(WPS.PROFILE_ID) IS NOT NULL AND TRIM(WPS.PROFILE_ID) != '' 
+                 AND (TRIM(WPS.LE_ID) IS NULL OR TRIM(WPS.LE_ID) = '') THEN NULL
+            WHEN TRIM(WPS.PROFILE_ID) IS NOT NULL AND TRIM(WPS.PROFILE_ID) != '' 
+                 AND TRIM(WPS.LE_ID) IS NOT NULL AND TRIM(WPS.LE_ID) != '' THEN '-1i'
+            WHEN (TRIM(WPS.PROFILE_ID) IS NULL OR TRIM(WPS.PROFILE_ID) = '') 
+                 AND TRIM(WPS.LE_ID) IS NOT NULL AND TRIM(WPS.LE_ID) != '' THEN '-2i'
+            WHEN (TRIM(WPS.PROFILE_ID) IS NULL OR TRIM(WPS.PROFILE_ID) = '') 
+                 AND (TRIM(WPS.LE_ID) IS NULL OR TRIM(WPS.LE_ID) = '') THEN '-3i'
+            ELSE NULL
+        END AS MAST_PATN_TP_CD,
+
+        CASE 
+            WHEN TRIM(WPS.PROFILE_ID) IS NOT NULL AND TRIM(WPS.PROFILE_ID) != '' 
+                 AND (TRIM(WPS.LE_ID) IS NULL OR TRIM(WPS.LE_ID) = '') THEN NULL
+            WHEN TRIM(WPS.PROFILE_ID) IS NOT NULL AND TRIM(WPS.PROFILE_ID) != '' 
+                 AND TRIM(WPS.LE_ID) IS NOT NULL AND TRIM(WPS.LE_ID) != '' 
+                 THEN 'Individual RELATIONSHIPNO with both SCI and ICM ID Exist'
+            WHEN (TRIM(WPS.PROFILE_ID) IS NULL OR TRIM(WPS.PROFILE_ID) = '') 
+                 AND TRIM(WPS.LE_ID) IS NOT NULL AND TRIM(WPS.LE_ID) != '' 
+                 THEN 'Individual RELATIONSHIPNO with ICM ID not available but SCI ID available'
+            WHEN (TRIM(WPS.PROFILE_ID) IS NULL OR TRIM(WPS.PROFILE_ID) = '') 
+                 AND (TRIM(WPS.LE_ID) IS NULL OR TRIM(WPS.LE_ID) = '') 
+                 THEN 'Individual RELATIONSHIPNO with both ICM and SCI ID not available'
+            ELSE NULL
+        END AS MAST_PATN_TP_DESC,
+
+        WPS.INST_CLAS_CD AS INST_CLAS_CD,
+        WPS.INST_CLAS_DESC AS INST_CLAS_DESC,
+        WPS.SCB_STAF_FL AS SCB_STAF_FL,
+        WPS.ISIC_CD AS ISIC_CD,
+        WPS.ISIC_DESC AS ISIC_DESC,
+        WPS.SEGMT_EFF_DT AS SEGMT_EFF_DT,
+        'EBB' AS DATA_SRC,
+        'ID' AS SOURCE_COUNTRY_CODE,
+        'ID' AS ACCS_CTRY_CD,
+
+        CASE 
+            WHEN TRIM(WEP.DOM_MAST_REF) IS NULL OR TRIM(WEP.DOM_MAST_REF) = '' THEN NULL
+            WHEN TRIM(WEP.DOM_MAST_REF) IS NOT NULL AND TRIM(WEP.DOM_MAST_REF) != '' THEN PSE.ACCS_SEGMT_CD_PSEUDO 
+            WHEN TRIM(WEP.LE_ID) IS NULL OR TRIM(WEP.LE_ID) = '' THEN NULL
+            ELSE NULL 
+        END AS ACCS_SEGMT_CD,
+
+        'EBB~ID~W_ENTRP_PRTY~C_CRTD_CORE_PRTY~1' AS PROCESS_ID
+
+    FROM (
+        SELECT * 
+        FROM UAT1_TB_DHUB_PRIM_WORK.W_ENTRP_PRTY 
+        WHERE PRTY_TYPE_CD = 'I' 
+          AND PROCESS_DATE = '20241231' 
+          AND DATA_SRC = 'EBB' 
+          AND SOURCE_COUNTRY_CODE = 'ID'
+    ) WEP
+
+    LEFT JOIN (
+        SELECT * 
+        FROM UAT1_TB_DHUB_PRIM_WORK.C_PSEUDO_PRTY 
+        WHERE DATA_SRC = 'SCI' AND SOURCE_COUNTRY_CODE = 'XX'
+    ) PSC 
+        ON CONCAT(TRIM(WEP.LE_ID), '-', TRIM(WEP.SP_ID)) = PSC.SRC_KEY1 
+
+    LEFT JOIN (
+        SELECT * 
+        FROM UAT1_TB_DHUB_PRIM_WORK.C_PSEUDO_PRTY 
+        WHERE DATA_SRC = 'ICM'
+    ) PSI 
+        ON TRIM(WEP.PROFILE_ID) = TRIM(PSI.SRC_KEY2)
+        AND WEP.SOURCE_COUNTRY_CODE = PSI.SOURCE_COUNTRY_CODE
+) temp;
+
+——-
 select count(*) from (SELECT
 WEP.PRTY_SROGT_ID AS PRTY_SROGT_ID,
 WEP.DOM_PRTY_REF AS DOM_PRTY_REF,
