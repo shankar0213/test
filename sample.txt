@@ -1,3 +1,8 @@
+Core and ADM HQL development has been completed, and we’ve sent an email to Priya and Saraswathi for testing.
+YAML creation is in progress, and we are concurrently updating the YAML files based on the latest mapping sheets.
+The security matrix for naen views has been approved today, and we will start the YAML testing.
+
+
 SELECT COUNT(*) 
 FROM (
     SELECT
