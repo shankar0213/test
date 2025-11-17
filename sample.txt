@@ -1,3 +1,20 @@
+Subject: Clarification Required on Tokenization Handling for prty_srogt_id in c_aprvd_lmt Table
+Hi Team,
+We have identified an issue related to the prty_srogt_id column in the c_aprvd_lmt core table. This table is built using the combination of two map group IDs (i.e., it derives values from two different source tables).
+In the current setup:
+From Table 1, the relationship_no column is tokenised.
+From Table 2, the relationship_no column is not tokenised.
+Since the target column prty_srogt_id is populated using values coming from both tables, the resulting data is a mix of tokenised and non-tokenised values. During YAML development, when we attempt to un-tokenise this column, we need clarity on how this should be handled.
+Request for clarification:
+Should we perform un-tokenisation only on the specific tokenised values coming from Table 1?
+OR
+Should the relationship_no column in Table 2 also be tokenised for consistency, so that the target column contains only uniformly tokenised data?
+Please confirm the expected approach so we can proceed accordingly.
+
+
+subject:%20Clarification%20Required%20on%20Tokenization%20Handling%20for%20prty_srogt_id%20in%20c_aprvd_lmt%20Table%0AHi%20Team,%0AWe%20have%20identified%20an%20issue%20related%20to%20the%20prty_srogt_id%20column%20in%20the%20c_aprvd_lmt%20core%20table.%20This%20table%20is%20built%20using%20the%20combination%20of%20two%20map%20group%20IDs%20(i.e.,%20it%20derives%20values%20from%20two%20different%20source%20tables).%0AIn%20the%20current%20setup%3A%0AFrom%20Table%201,%20the%20relationship_no%20column%20is%20tokenised.%0AFrom%20Table%202,%20the%20relationship_no%20column%20is%20not%20tokenised.%0ASince%20the%20target%20column%20prty_srogt_id%20is%20populated%20using%20values%20coming%20from%20both%20tables,%20the%20resulting%20data%20is%20a%20mix%20of%20tokenised%20and%20non-tokenised%20values.%20During%20YAML%20development,%20when%20we%20attempt%20to%20un-tokenise%20this%20column,%20we%20need%20clarity%20on%20how%20this%20should%20be%20handled.%0ARequest%20for%20clarification%3A%0AShould%20we%20perform%20un-tokenisation%20only%20on%20the%20specific%20tokenised%20values%20coming%20from%20Table%201?%0AOR%0AShould%20the%20relationship_no%20column%20in%20Table%202%20also%20be%20tokenised%20for%20consistency,%20so%20that%20the%20target%20column%20contains%20only%20uniformly%20tokenised%20data?%0APlease%20confirm%20the%20expected%20approach%20so%20we%20can%20proceed%20accordingly.
+
+
 Core and ADM HQL development has been completed, and we’ve sent an email to Priya and Saraswathi for testing.
 YAML creation is in progress, and we are concurrently updating the YAML files based on the latest mapping sheets.
 The security matrix for naen views has been approved today, and we will start the YAML testing.
