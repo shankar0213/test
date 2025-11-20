@@ -1,3 +1,45 @@
+
+def transform_rules(df):
+
+    # Quote map notes for default rows
+    df["Map Note"] = df.apply(
+        lambda x: f"\"{x['Map Note']}\"" if x["Process Type"] == "Default" else x["Map Note"],
+        axis=1
+    )
+
+    # Build the source for non-default rows
+    df["Source"] = df.apply(
+        lambda x: None if x["Process Type"] == "Default" 
+        else f"{x['Source Object Name']}.{x['Source Attributes Name']}",
+        axis=1
+    )
+
+    output_rows = []
+
+    for rule, group in df.groupby("Rule Name"):
+
+        if "Default" in group["Process Type"].values:
+            # Only take the default row
+            default_row = group[group["Process Type"] == "Default"].iloc[0]
+            output_rows.append({
+                "Rule Name": rule,
+                "Map Note": default_row["Map Note"],
+                "Source": None
+            })
+
+        else:
+            # No default → pivot all sources
+            sources = "[" + ", ".join(group["Source"].dropna().unique()) + "]"
+            output_rows.append({
+                "Rule Name": rule,
+                "Map Note": group.iloc[0]["Map Note"],
+                "Source": sources
+            })
+
+    return pd.DataFrame(output_rows)
+
+
+
 col 1 -> Rule Name (without Duplicates)
 col 2 -> Map Note (Check the column Process Type= "Default" the value in Map Note should come with double quotes "Map Note Value" and Source column value should be null else perform column operation )
 col 3 -> Source (Cobination of , if more than one Rule Name all values of colum Source Object Name.Source Object Name should come inside [Source Object Name.Source Object Name] simplly have to be pivot)
