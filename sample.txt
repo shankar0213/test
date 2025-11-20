@@ -1,4 +1,33 @@
 
+df = pd.DataFrame({
+    "Process Type": [
+        "Default", "Map", "Map",
+        "Default", "Map", "Map",
+        "Map", "Map", "Default", "Map"
+    ],
+    "Rule Name": [
+        "R1", "R1", "R1",
+        "R2", "R2", "R2",
+        "R3", "R3", "R3", "R4"
+    ],
+    "Source Object Name": [
+        None, "ObjA", "ObjB",
+        None, "ObjX", "ObjY",
+        "ObjM", "ObjN", None, "ObjP"
+    ],
+    "Source Attributes Name": [
+        None, "Attr1", "Attr2",
+        None, "Code1", "Code2",
+        "Field1", "Field2", None, "FieldP"
+    ],
+    "Map Note": [
+        "Default Note R1", "Mapped A", "Mapped B",
+        "Default Note R2", "Mapped X", "Mapped Y",
+        "Mapped M", "Mapped N", "Default Note R3", "Mapped P"
+    ]
+})
+
+
 def transform_rules(df):
 
     # Quote map notes for default rows
