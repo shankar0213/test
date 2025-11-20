@@ -1,3 +1,10 @@
+col 1 -> Rule Name (without Duplicates)
+col 2 -> Map Note (Check the column Process Type= "Default" the value in Map Note should come with double quotes "Map Note Value" and Source column value should be null else perform column operation )
+col 3 -> Source (Cobination of , if more than one Rule Name all values of colum Source Object Name.Source Object Name should come inside [Source Object Name.Source Object Name] simplly have to be pivot)
+
+ Data frame consists of column(Process Type,Rule Name,Source Object Name,Source Attributes Name,Map Note)
+ out put dataframe needs ,(Rule Name, Map Note, Source)
+
 import numpy as np
 
 df["query"] = np.where(
