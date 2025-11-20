@@ -1,3 +1,12 @@
+import numpy as np
+
+df["query"] = np.where(
+    df["data_processing_rule"].str.strip() != "", 
+    df["data_processing_rule"] + " AS " + df["target_attribute_name"],
+    df["source_object_name"] + "." + df["source_attribute_name"] + " AS " + df["target_attribute_name"]
+)
+
+
 Subject: Clarification Required on Tokenization Handling for prty_srogt_id in c_aprvd_lmt Table
 Hi Team,
 We have identified an issue related to the prty_srogt_id column in the c_aprvd_lmt core table. This table is built using the combination of two map group IDs (i.e., it derives values from two different source tables).
