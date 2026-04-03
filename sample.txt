@@ -1,21 +1,170 @@
-2026-04-04 02:20:59,718 [INFO] Authentication (password) successful!
-2026-04-04 02:20:59,718 [INFO] SSH connected  ->  gridappuat@10.83.212.30:22
-2026-04-04 02:20:59,718 [INFO] Probing server tools ...
-2026-04-04 02:21:00,155 [INFO]   beeline    found
-2026-04-04 02:21:00,573 [INFO]   hive_cli   found
-2026-04-04 02:21:00,968 [INFO]   hdfs_cli   found
-2026-04-04 02:21:03,090 [INFO]   hdfs_fs    not reachable
-2026-04-04 02:21:04,427 [INFO] JDBC URL: jdbc:hive2://localhost:10000/default
-2026-04-04 02:21:04,428 [INFO] Estimating row count (may take a minute) ...
-2026-04-04 02:21:08,115 [WARNING] COUNT(*) returned no output — will skip estimate.
-2026-04-04 02:21:08,116 [INFO] Selected: Strategy B (Beeline + SFTP)  |  rows: unknown
-2026-04-04 02:21:08,116 [INFO] Strategy B: Beeline + SFTP stream
-2026-04-04 02:21:08,116 [INFO]   Beeline (attempt 1/3) ...
-2026-04-04 02:21:11,716 [WARNING]   Remote CSV empty; retry in 5s ...
-2026-04-04 02:21:16,717 [INFO]   Beeline (attempt 2/3) ...
-2026-04-04 02:21:20,283 [WARNING]   Remote CSV empty; retry in 5s ...
-2026-04-04 02:21:25,284 [INFO]   Beeline (attempt 3/3) ...
-2026-04-04 02:21:28,848 [WARNING] Strategy B failed: Beeline export failed. Check /tmp/beeline_err_*.log on the server.  ->  falling back to C.
-2026-04-04 02:21:28,848 [INFO] Strategy C: Beeline stdout (fallback)
-2026-04-04 02:21:32,306 [INFO]   Written 0 lines (including header).
-2026-04-04 02:21:32,733 [INFO] SSH connection closed.
+"""
+debug_hive.py
+=============
+Run this FIRST to diagnose why beeline is failing.
+It SSHes into the server and checks the actual error logs,
+finds the correct JDBC URL, and tests beeline with a simple query.
+
+Usage:
+    python debug_hive.py
+"""
+
+import time
+import paramiko
+
+SSH_CONFIG = dict(
+    ssh_host     = "10.83.212.30",
+    ssh_user     = "gridappuat",
+    ssh_password = "123456789@S",
+    ssh_port     = 22,
+)
+
+
+def connect():
+    client = paramiko.SSHClient()
+    client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+    client.connect(
+        hostname = SSH_CONFIG["ssh_host"],
+        port     = SSH_CONFIG["ssh_port"],
+        username = SSH_CONFIG["ssh_user"],
+        password = SSH_CONFIG["ssh_password"],
+        timeout  = 30,
+    )
+    print(f"[OK] SSH connected to {SSH_CONFIG['ssh_host']}\n")
+    return client
+
+
+def run(client, cmd, timeout=30):
+    transport = client.get_transport()
+    chan = transport.open_session()
+    chan.settimeout(timeout)
+    chan.exec_command(cmd)
+    stdout_buf, stderr_buf = b"", b""
+    while not chan.exit_status_ready():
+        if chan.recv_ready():        stdout_buf += chan.recv(65536)
+        if chan.recv_stderr_ready(): stderr_buf += chan.recv_stderr(65536)
+        time.sleep(0.05)
+    while chan.recv_ready():        stdout_buf += chan.recv(65536)
+    while chan.recv_stderr_ready(): stderr_buf += chan.recv_stderr(65536)
+    return (stdout_buf.decode("utf-8", errors="replace").strip(),
+            stderr_buf.decode("utf-8", errors="replace").strip())
+
+
+def section(title):
+    print("=" * 60)
+    print(f"  {title}")
+    print("=" * 60)
+
+
+client = connect()
+
+# ── 1. Read the beeline error log from the last run ──────────────────────────
+section("1. Last beeline error log")
+out, _ = run(client, "ls -t /tmp/beeline_err_*.log 2>/dev/null | head -3")
+if out:
+    for logfile in out.splitlines():
+        print(f"\n--- {logfile} ---")
+        content, _ = run(client, f"cat '{logfile}'")
+        print(content[:3000] if content else "(empty)")
+else:
+    print("No beeline error logs found in /tmp/")
+
+# ── 2. Find hive-site.xml and show HiveServer2 settings ──────────────────────
+section("2. HiveServer2 config from hive-site.xml")
+out, _ = run(client,
+    "find /etc /usr/lib /usr/local /opt /home -name hive-site.xml 2>/dev/null | head -5")
+print("hive-site.xml locations found:")
+print(out or "  (none found)")
+
+if out:
+    for f in out.splitlines()[:2]:
+        print(f"\n--- thrift entries in {f} ---")
+        grep, _ = run(client, f"grep -A1 'thrift\\|server2\\|zookeeper' '{f}' 2>/dev/null | head -60")
+        print(grep or "  (no matches)")
+
+# ── 3. Check if HiveServer2 is actually running ───────────────────────────────
+section("3. HiveServer2 process check")
+out, _ = run(client, "ps aux 2>/dev/null | grep -i 'hiveserver2\\|HiveServer2' | grep -v grep")
+print(out or "  HiveServer2 process NOT found running on this node.")
+
+out2, _ = run(client, "ps aux 2>/dev/null | grep -i 'RunJar\\|hive' | grep -v grep | head -5")
+print("\nOther Hive-related processes:")
+print(out2 or "  (none)")
+
+# ── 4. Check what ports are listening ─────────────────────────────────────────
+section("4. Listening ports (Hive is usually 10000)")
+out, _ = run(client, "ss -tlnp 2>/dev/null | grep -E '10000|10001|2181|9083' || "
+                     "netstat -tlnp 2>/dev/null | grep -E '10000|10001|2181|9083'")
+print(out or "  No Hive/Zookeeper ports found listening.")
+
+# ── 5. Try to find the beeline connection URL from shell history / scripts ───
+section("5. Beeline URL from history / wrapper scripts")
+out, _ = run(client,
+    "grep -r 'jdbc:hive2' /etc /usr/lib /usr/local /opt /home "
+    "~/.bash_history 2>/dev/null | grep -v '.pyc\\|Binary' | head -20")
+print(out or "  No jdbc:hive2 URLs found in common locations.")
+
+# ── 6. Show beeline version and default URL ───────────────────────────────────
+section("6. Beeline version + default connection URL")
+out, err = run(client, "beeline --version 2>&1 | head -5")
+print("Version:", out or err)
+
+out, err = run(client, "beeline -u '' 2>&1 | head -10")
+print("\nbeeline -u '' output (shows default URL hints):")
+print(out or err)
+
+# ── 7. Test beeline with a simple query on common URLs ───────────────────────
+section("7. Beeline connection test (trying common URLs)")
+
+test_urls = [
+    "jdbc:hive2://localhost:10000/default",
+    "jdbc:hive2://localhost:10000/",
+    "jdbc:hive2://localhost:10001/default",
+    "jdbc:hive2://0.0.0.0:10000/default",
+]
+
+# Also try any URL found in step 5
+import re
+if out:
+    found = re.findall(r"jdbc:hive2://[^\s'\"]+", out)
+    for u in found[:3]:
+        if u not in test_urls:
+            test_urls.insert(0, u)
+
+for url in test_urls:
+    print(f"\nTesting: {url}")
+    test_cmd = (
+        f"beeline --silent=true --outputformat=csv2 --showHeader=true "
+        f"-u \"{url}\" "
+        f"-e 'SHOW DATABASES;' "
+        f"2>&1 | head -20"
+    )
+    out, err = run(client, test_cmd, timeout=20)
+    result = (out + err).strip()
+    if result:
+        print(result[:500])
+        if "Error" not in result and "Exception" not in result:
+            print(f"\n[FOUND WORKING URL]: {url}")
+            break
+    else:
+        print("  (no output)")
+
+# ── 8. Check if Zookeeper-based HiveServer2 URL is needed ────────────────────
+section("8. Zookeeper check (needed for HA clusters)")
+out, _ = run(client,
+    "grep -r 'zookeeper\\|ZooKeeper\\|zoo.cfg' /etc/zookeeper /etc/hive 2>/dev/null "
+    "| grep -i 'server\\|connect\\|quorum' | head -10")
+print(out or "  No Zookeeper config found.")
+
+# ── 9. Check hive env / hadoop config ────────────────────────────────────────
+section("9. Hive environment")
+out, _ = run(client, "env 2>/dev/null | grep -iE 'hive|hadoop|java|hdfs' | head -20")
+print(out or "  (no Hive/Hadoop env vars)")
+
+out2, _ = run(client, "echo $HIVE_HOME $HADOOP_HOME $JAVA_HOME")
+print("\nHIVE_HOME / HADOOP_HOME / JAVA_HOME:", out2)
+
+client.close()
+print("\n" + "=" * 60)
+print("  Debug complete. Share the output above to get the fix.")
+print("=" * 60)
