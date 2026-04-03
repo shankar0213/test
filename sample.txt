@@ -1,170 +1,279 @@
-"""
-debug_hive.py
-=============
-Run this FIRST to diagnose why beeline is failing.
-It SSHes into the server and checks the actual error logs,
-finds the correct JDBC URL, and tests beeline with a simple query.
+[OK] SSH connected to 10.83.212.30
 
-Usage:
-    python debug_hive.py
-"""
+============================================================
+  1. Last beeline error log
+============================================================
 
-import time
-import paramiko
+--- /tmp/beeline_err_3767683.log ---
+SLF4J: Class path contains multiple SLF4J bindings.
+SLF4J: Found binding in [jar:file:/opt/cloudera/parcels/CDH-7.1.9-1.cdh7.1.9.p1045.67903105/jars/log4j-slf4j-impl-2.18.0.jar!/org/slf4j/impl/StaticLoggerBinder.class]
+SLF4J: Found binding in [jar:file:/opt/cloudera/parcels/CDH-7.1.9-1.cdh7.1.9.p1045.67903105/jars/slf4j-reload4j-1.7.36.jar!/org/slf4j/impl/StaticLoggerBinder.class]
+SLF4J: See http://www.slf4j.org/codes.html#multiple_bindings for an explanation.
+SLF4J: Actual binding is of type [org.apache.logging.slf4j.Log4jLoggerFactory]
+WARNING: Use "yarn jar" to launch YARN applications.
+SLF4J: Class path contains multiple SLF4J bindings.
+SLF4J: Found binding in [jar:file:/opt/cloudera/parcels/CDH-7.1.9-1.cdh7.1.9.p1045.67903105/jars/log4j-slf4j-impl-2.18.0.jar!/org/slf4j/impl/StaticLoggerBinder.class]
+SLF4J: Found binding in [jar:file:/opt/cloudera/parcels/CDH-7.1.9-1.cdh7.1.9.p1045.67903105/jars/slf4j-reload4j-1.7.36.jar!/org/slf4j/impl/StaticLoggerBinder.class]
+SLF4J: See http://www.slf4j.org/codes.html#multiple_bindings for an explanation.
+SLF4J: Actual binding is of type [org.apache.logging.slf4j.Log4jLoggerFactory]
+26/04/04 04:51:28 [main]: WARN jdbc.HiveConnection: Failed to connect to localhost:10000
+Could not open connection to the HS2 server. Please check the server URI and if the URI is correct, then ask the administrator to check the server status.
+Error: Could not open client transport with JDBC Uri: jdbc:hive2://localhost:10000/default: java.net.ConnectException: Connection refused (state=08S01,code=0)
 
-SSH_CONFIG = dict(
-    ssh_host     = "10.83.212.30",
-    ssh_user     = "gridappuat",
-    ssh_password = "123456789@S",
-    ssh_port     = 22,
-)
+--- /tmp/beeline_err_3767181.log ---
+SLF4J: Class path contains multiple SLF4J bindings.
+SLF4J: Found binding in [jar:file:/opt/cloudera/parcels/CDH-7.1.9-1.cdh7.1.9.p1045.67903105/jars/log4j-slf4j-impl-2.18.0.jar!/org/slf4j/impl/StaticLoggerBinder.class]
+SLF4J: Found binding in [jar:file:/opt/cloudera/parcels/CDH-7.1.9-1.cdh7.1.9.p1045.67903105/jars/slf4j-reload4j-1.7.36.jar!/org/slf4j/impl/StaticLoggerBinder.class]
+SLF4J: See http://www.slf4j.org/codes.html#multiple_bindings for an explanation.
+SLF4J: Actual binding is of type [org.apache.logging.slf4j.Log4jLoggerFactory]
+WARNING: Use "yarn jar" to launch YARN applications.
+SLF4J: Class path contains multiple SLF4J bindings.
+SLF4J: Found binding in [jar:file:/opt/cloudera/parcels/CDH-7.1.9-1.cdh7.1.9.p1045.67903105/jars/log4j-slf4j-impl-2.18.0.jar!/org/slf4j/impl/StaticLoggerBinder.class]
+SLF4J: Found binding in [jar:file:/opt/cloudera/parcels/CDH-7.1.9-1.cdh7.1.9.p1045.67903105/jars/slf4j-reload4j-1.7.36.jar!/org/slf4j/impl/StaticLoggerBinder.class]
+SLF4J: See http://www.slf4j.org/codes.html#multiple_bindings for an explanation.
+SLF4J: Actual binding is of type [org.apache.logging.slf4j.Log4jLoggerFactory]
+26/04/04 04:51:20 [main]: WARN jdbc.HiveConnection: Failed to connect to localhost:10000
+Could not open connection to the HS2 server. Please check the server URI and if the URI is correct, then ask the administrator to check the server status.
+Error: Could not open client transport with JDBC Uri: jdbc:hive2://localhost:10000/default: java.net.ConnectException: Connection refused (state=08S01,code=0)
 
+--- /tmp/beeline_err_3766738.log ---
+SLF4J: Class path contains multiple SLF4J bindings.
+SLF4J: Found binding in [jar:file:/opt/cloudera/parcels/CDH-7.1.9-1.cdh7.1.9.p1045.67903105/jars/log4j-slf4j-impl-2.18.0.jar!/org/slf4j/impl/StaticLoggerBinder.class]
+SLF4J: Found binding in [jar:file:/opt/cloudera/parcels/CDH-7.1.9-1.cdh7.1.9.p1045.67903105/jars/slf4j-reload4j-1.7.36.jar!/org/slf4j/impl/StaticLoggerBinder.class]
+SLF4J: See http://www.slf4j.org/codes.html#multiple_bindings for an explanation.
+SLF4J: Actual binding is of type [org.apache.logging.slf4j.Log4jLoggerFactory]
+WARNING: Use "yarn jar" to launch YARN applications.
+SLF4J: Class path contains multiple SLF4J bindings.
+SLF4J: Found binding in [jar:file:/opt/cloudera/parcels/CDH-7.1.9-1.cdh7.1.9.p1045.67903105/jars/log4j-slf4j-impl-2.18.0.jar!/org/slf4j/impl/StaticLoggerBinder.class]
+SLF4J: Found binding in [jar:file:/opt/cloudera/parcels/CDH-7.1.9-1.cdh7.1.9.p1045.67903105/jars/slf4j-reload4j-1.7.36.jar!/org/slf4j/impl/StaticLoggerBinder.class]
+SLF4J: See http://www.slf4j.org/codes.html#multiple_bindings for an explanation.
+SLF4J: Actual binding is of type [org.apache.logging.slf4j.Log4jLoggerFactory]
+26/04/04 04:51:11 [main]: WARN jdbc.HiveConnection: Failed to connect to localhost:10000
+Could not open connection to the HS2 server. Please check the server URI and if the URI is correct, then ask the administrator to check the server status.
+Error: Could not open client transport with JDBC Uri: jdbc:hive2://localhost:10000/default: java.net.ConnectException: Connection refused (state=08S01,code=0)
+============================================================
+  2. HiveServer2 config from hive-site.xml
+============================================================
+hive-site.xml locations found:
+/etc/hive/conf.cloudera.hive_on_tez/hive-site.xml
+/etc/hive/conf.cloudera.hive/hive-site.xml
+/opt/cloudera/parcels/CDH-7.1.9-1.cdh7.1.9.p1045.67903105/etc/hive/conf.dist/hive-site.xml
 
-def connect():
-    client = paramiko.SSHClient()
-    client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-    client.connect(
-        hostname = SSH_CONFIG["ssh_host"],
-        port     = SSH_CONFIG["ssh_port"],
-        username = SSH_CONFIG["ssh_user"],
-        password = SSH_CONFIG["ssh_password"],
-        timeout  = 30,
-    )
-    print(f"[OK] SSH connected to {SSH_CONFIG['ssh_host']}\n")
-    return client
+--- thrift entries in /etc/hive/conf.cloudera.hive_on_tez/hive-site.xml ---
+<name>hive.server2.transport.mode</name>
+    <value>http</value>
+--
+    <name>hive.server2.logging.operation.enabled</name>
+    <value>true</value>
+--
+    <name>hive.server2.logging.operation.log.location</name>
+    <value>/var/log/cloudera/hive/operation_logs</value>
+--
+    <name>hive.zookeeper.quorum</name>
+    <value>hkimou0gbe20a00.hk.standardchartered.com,hkimou0gbe20a02.hk.standardchartered.com,hkimou0gbe20a01.hk.standardchartered.com</value>
+--
+    <name>hive.zookeeper.client.port</name>
+    <value>2181</value>
+--
+    <name>hbase.zookeeper.quorum</name>
+    <value>hkimou0gbe20a00.hk.standardchartered.com,hkimou0gbe20a02.hk.standardchartered.com,hkimou0gbe20a01.hk.standardchartered.com</value>
+--
+    <name>hbase.zookeeper.property.clientPort</name>
+    <value>2181</value>
+--
+    <value>org.apache.hadoop.hive.thrift.DBTokenStore</value>
+  </property>
+--
+    <name>hive.server2.webui.exclude.ciphersuites</name>
+    <value>^TLS_DHE.*$,^.*SHA$,^TLS_RSA_WITH.*$,^.*MD5.*$,^TLS_DH_.*$,^.*RC4.*$,^.*CCM.*$</value>
+--
+    <name>hive.server2.authentication</name>
+    <value>KERBEROS</value>
+--
+    <name>hive.server2.authentication.kerberos.principal</name>
+    <value>hive/_HOST@ZONE1.SCBDEV.NET</value>
+--
+    <name>hive.server2.use.SSL</name>
+    <value>true</value>
+--
+    <name>hive.server2.http.exclude.ciphersuites</name>
+    <value>^TLS_DHE.*$,^.*SHA$,^TLS_RSA_WITH.*$,^.*MD5.*$,^TLS_DH_.*$,^.*RC4.*$,^.*CCM.*$</value>
+--
+    <name>hive.server2.binary.include.ciphersuites</name>
+    <value>TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384:TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384:TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256:TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256:TLS_ECDHE_ECDSA_WITH_AES_256_CBC_SHA384:TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA384:TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA256:TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA256</value>
+--
+    <name>hive.server2.support.dynamic.service.discovery</name>
+    <value>true</value>
+--
+    <value>thrift://hkimou0gbe20a00.hk.standardchartered.com:9083,thrift://hkimou0gbe20a01.hk.standardchartered.com:9083,thrift://hkimou0gbe20a02.hk.standardchartered.com:9083</value>
+  </property>
+--
+  <!--'hive.server2.zookeeper.namespace', originally set to 'hiveserver2' (non-final), is overridden below by a safety valve-->
+  <property>
+    <name> hive.server2.tez.initialize.default.sessions</name>
+    <value>false</value>
+--
+    <name>hive.server2.tez.queue.access.check</name>
+    <value>true</value>
+--
+    <name>hive.server2.tez.sessions.custom.queue.allowed</name>
+    <value>true</value>
+--
+    <name>hive.server2.zookeeper.namespace</name>
 
+--- thrift entries in /etc/hive/conf.cloudera.hive/hive-site.xml ---
+<value>thrift://hkimou0gbe20a00.hk.standardchartered.com:9083,thrift://hkimou0gbe20a01.hk.standardchartered.com:9083,thrift://hkimou0gbe20a02.hk.standardchartered.com:9083</value>
+  </property>
+--
+    <name>hive.server2.logging.operation.enabled</name>
+    <value>true</value>
+--
+    <name>hive.server2.logging.operation.log.location</name>
+    <value>/var/log/hive/operation_logs</value>
+--
+    <name>hive.zookeeper.quorum</name>
+    <value>hkimou0gbe20a00.hk.standardchartered.com,hkimou0gbe20a02.hk.standardchartered.com,hkimou0gbe20a01.hk.standardchartered.com</value>
+--
+    <name>hive.zookeeper.client.port</name>
+    <value>2181</value>
+--
+    <name>hbase.zookeeper.quorum</name>
+    <value>hkimou0gbe20a00.hk.standardchartered.com,hkimou0gbe20a02.hk.standardchartered.com,hkimou0gbe20a01.hk.standardchartered.com</value>
+--
+    <name>hbase.zookeeper.property.clientPort</name>
+    <value>2181</value>
+--
+    <value>org.apache.hadoop.hive.thrift.DBTokenStore</value>
+  </property>
+--
+    <name>hive.server2.enable.doAs</name>
+    <value>true</value>
+--
+    <name>hive.server2.authentication</name>
+    <value>kerberos</value>
+--
+    <name>hive.server2.use.SSL</name>
+    <value>true</value>
+--
+    <name>hive.server2.http.exclude.ciphersuites</name>
+    <value>^TLS_DHE.*$,^.*SHA$,^TLS_RSA_WITH.*$,^.*MD5.*$,^TLS_DH_.*$,^.*RC4.*$,^.*CCM.*$</value>
+--
+    <name>hive.server2.binary.include.ciphersuites</name>
+    <value>TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384:TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384:TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256:TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256:TLS_ECDHE_ECDSA_WITH_AES_256_CBC_SHA384:TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA384:TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA256:TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA256</value>
+============================================================
+  3. HiveServer2 process check
+============================================================
+  HiveServer2 process NOT found running on this node.
 
-def run(client, cmd, timeout=30):
-    transport = client.get_transport()
-    chan = transport.open_session()
-    chan.settimeout(timeout)
-    chan.exec_command(cmd)
-    stdout_buf, stderr_buf = b"", b""
-    while not chan.exit_status_ready():
-        if chan.recv_ready():        stdout_buf += chan.recv(65536)
-        if chan.recv_stderr_ready(): stderr_buf += chan.recv_stderr(65536)
-        time.sleep(0.05)
-    while chan.recv_ready():        stdout_buf += chan.recv(65536)
-    while chan.recv_stderr_ready(): stderr_buf += chan.recv_stderr(65536)
-    return (stdout_buf.decode("utf-8", errors="replace").strip(),
-            stderr_buf.decode("utf-8", errors="replace").strip())
+Other Hive-related processes:
+gridapp+  449922  0.0  0.1 5129512 558368 ?      Tl   Mar17   0:13 /usr/java/jdk1.8/bin/java -Dproc_jar -Djava.net.preferIPv4Stack=true -Djava.net.preferIPv4Stack=true -Dhadoop.metrics.log.level=WARN -Xmx3221225472 -Djava.net.preferIPv4Stack=true -Djava.io.tmpdir=/var/tmp -Dlog4j.configurationFile=hive-log4j2.properties -Djava.util.logging.config.file=/opt/cloudera/parcels/CDH-7.1.9-1.cdh7.1.9.p1045.67903105/bin/../lib/hive/bin/../conf/parquet-logging.properties -Dlog4j.configurationFile=beeline-log4j2.properties -Dyarn.log.dir=/opt/cloudera/parcels/CDH-7.1.9-1.cdh7.1.9.p1045.67903105/lib/hadoop/logs -Dyarn.log.file=hadoop.log -Dyarn.home.dir=/opt/cloudera/parcels/CDH-7.1.9-1.cdh7.1.9.p1045.67903105/lib/hadoop/libexec/../../hadoop-yarn -Dyarn.root.logger=INFO,console -Djava.library.path=/opt/cloudera/parcels/PTY_BDP/jpeplite/lib::/opt/cloudera/parcels/CDH-7.1.9-1.cdh7.1.9.p1045.67903105/lib/hadoop/lib/native -Dhadoop.log.dir=/opt/cloudera/parcels/CDH-7.1.9-1.cdh7.1.9.p1045.67903105/lib/hadoop/logs -Dhadoop.log.file=hadoop.log -Dhadoop.home.dir=/opt/cloudera/parcels/CDH-7.1.9-1.cdh7.1.9.p1045.67903105/lib/hadoop -Dhadoop.id.str=gridappsit -Dhadoop.root.logger=INFO,console -Dhadoop.policy.file=hadoop-policy.xml -Dhadoop.security.logger=INFO,NullAppender org.apache.hadoop.util.RunJar /opt/cloudera/parcels/CDH-7.1.9-1.cdh7.1.9.p1045.67903105/bin/../lib/hive/lib/hive-beeline-3.1.3000.7.1.9.1045-5.jar org.apache.hive.beeline.BeeLine --hiveconf hive.query.redaction.rules=/opt/cloudera/parcels/CDH-7.1.9-1.cdh7.1.9.p1045.67903105/bin/../lib/hive/conf/redaction-rules.json --hiveconf hive.exec.query.redactor.hooks=org.cloudera.hadoop.hive.ql.hooks.QueryRedactor -n gridappsit -p gridappsit
+g.trade+  531138  0.0  0.0 5058676 525572 ?      Tl   Mar27   0:07 /usr/java/jdk1.8/bin/java -Dproc_jar -Djava.net.preferIPv4Stack=true -Djava.net.preferIPv4Stack=true -Dhadoop.metrics.log.level=WARN -Xmx3221225472 -Djava.net.preferIPv4Stack=true -Djava.io.tmpdir=/var/tmp -Dlog4j.configurationFile=hive-log4j2.properties -Djava.util.logging.config.file=/opt/cloudera/parcels/CDH-7.1.9-1.cdh7.1.9.p1045.67903105/bin/../lib/hive/bin/../conf/parquet-logging.properties -Dlog4j.configurationFile=beeline-log4j2.properties -Dyarn.log.dir=/opt/cloudera/parcels/CDH-7.1.9-1.cdh7.1.9.p1045.67903105/lib/hadoop/logs -Dyarn.log.file=hadoop.log -Dyarn.home.dir=/opt/cloudera/parcels/CDH-7.1.9-1.cdh7.1.9.p1045.67903105/lib/hadoop/libexec/../../hadoop-yarn -Dyarn.root.logger=INFO,console -Djava.library.path=/opt/cloudera/parcels/PTY_BDP/jpeplite/lib::/opt/cloudera/parcels/CDH-7.1.9-1.cdh7.1.9.p1045.67903105/lib/hadoop/lib/native -Dhadoop.log.dir=/opt/cloudera/parcels/CDH-7.1.9-1.cdh7.1.9.p1045.67903105/lib/hadoop/logs -Dhadoop.log.file=hadoop.log -Dhadoop.home.dir=/opt/cloudera/parcels/CDH-7.1.9-1.cdh7.1.9.p1045.67903105/lib/hadoop -Dhadoop.id.str=g.tradeappsit.001 -Dhadoop.root.logger=INFO,console -Dhadoop.policy.file=hadoop-policy.xml -Dhadoop.security.logger=INFO,NullAppender org.apache.hadoop.util.RunJar /opt/cloudera/parcels/CDH-7.1.9-1.cdh7.1.9.p1045.67903105/bin/../lib/hive/lib/hive-beeline-3.1.3000.7.1.9.1045-5.jar org.apache.hive.beeline.BeeLine --hiveconf hive.query.redaction.rules=/opt/cloudera/parcels/CDH-7.1.9-1.cdh7.1.9.p1045.67903105/bin/../lib/hive/conf/redaction-rules.json --hiveconf hive.exec.query.redactor.hooks=org.cloudera.hadoop.hive.ql.hooks.QueryRedactor -n g.tradeappsit.001 -p g.tradeappsit.001
+gridapp+  595860  0.0  0.0 5056444 339504 ?      Tl   Mar10   0:06 /usr/java/jdk1.8/bin/java -Dproc_jar -Djava.net.preferIPv4Stack=true -Djava.net.preferIPv4Stack=true -Dhadoop.metrics.log.level=WARN -Xmx3221225472 -Djava.net.preferIPv4Stack=true -Djava.io.tmpdir=/var/tmp -Dlog4j.configurationFile=hive-log4j2.properties -Djava.util.logging.config.file=/opt/cloudera/parcels/CDH-7.1.9-1.cdh7.1.9.p1045.67903105/bin/../lib/hive/bin/../conf/parquet-logging.properties -Dlog4j.configurationFile=beeline-log4j2.properties -Dyarn.log.dir=/opt/cloudera/parcels/CDH-7.1.9-1.cdh7.1.9.p1045.67903105/lib/hadoop/logs -Dyarn.log.file=hadoop.log -Dyarn.home.dir=/opt/cloudera/parcels/CDH-7.1.9-1.cdh7.1.9.p1045.67903105/lib/hadoop/libexec/../../hadoop-yarn -Dyarn.root.logger=INFO,console -Djava.library.path=/opt/cloudera/parcels/PTY_BDP/jpeplite/lib::/opt/cloudera/parcels/CDH-7.1.9-1.cdh7.1.9.p1045.67903105/lib/hadoop/lib/native -Dhadoop.log.dir=/opt/cloudera/parcels/CDH-7.1.9-1.cdh7.1.9.p1045.67903105/lib/hadoop/logs -Dhadoop.log.file=hadoop.log -Dhadoop.home.dir=/opt/cloudera/parcels/CDH-7.1.9-1.cdh7.1.9.p1045.67903105/lib/hadoop -Dhadoop.id.str=gridappsit -Dhadoop.root.logger=INFO,console -Dhadoop.policy.file=hadoop-policy.xml -Dhadoop.security.logger=INFO,NullAppender org.apache.hadoop.util.RunJar /opt/cloudera/parcels/CDH-7.1.9-1.cdh7.1.9.p1045.67903105/bin/../lib/hive/lib/hive-beeline-3.1.3000.7.1.9.1045-5.jar org.apache.hive.beeline.BeeLine --hiveconf hive.query.redaction.rules=/opt/cloudera/parcels/CDH-7.1.9-1.cdh7.1.9.p1045.67903105/bin/../lib/hive/conf/redaction-rules.json --hiveconf hive.exec.query.redactor.hooks=org.cloudera.hadoop.hive.ql.hooks.QueryRedactor
+gridapp+  677101  0.0  0.1 5129100 550324 ?      Tl   Mar10   0:08 /usr/java/jdk1.8/bin/java -Dproc_jar -Djava.net.preferIPv4Stack=true -Djava.net.preferIPv4Stack=true -Dhadoop.metrics.log.level=WARN -Xmx3221225472 -Djava.net.preferIPv4Stack=true -Djava.io.tmpdir=/var/tmp -Dlog4j.configurationFile=hive-log4j2.properties -Djava.util.logging.config.file=/opt/cloudera/parcels/CDH-7.1.9-1.cdh7.1.9.p1045.67903105/bin/../lib/hive/bin/../conf/parquet-logging.properties -Dlog4j.configurationFile=beeline-log4j2.properties -Dyarn.log.dir=/opt/cloudera/parcels/CDH-7.1.9-1.cdh7.1.9.p1045.67903105/lib/hadoop/logs -Dyarn.log.file=hadoop.log -Dyarn.home.dir=/opt/cloudera/parcels/CDH-7.1.9-1.cdh7.1.9.p1045.67903105/lib/hadoop/libexec/../../hadoop-yarn -Dyarn.root.logger=INFO,console -Djava.library.path=/opt/cloudera/parcels/PTY_BDP/jpeplite/lib::/opt/cloudera/parcels/CDH-7.1.9-1.cdh7.1.9.p1045.67903105/lib/hadoop/lib/native -Dhadoop.log.dir=/opt/cloudera/parcels/CDH-7.1.9-1.cdh7.1.9.p1045.67903105/lib/hadoop/logs -Dhadoop.log.file=hadoop.log -Dhadoop.home.dir=/opt/cloudera/parcels/CDH-7.1.9-1.cdh7.1.9.p1045.67903105/lib/hadoop -Dhadoop.id.str=gridappsit -Dhadoop.root.logger=INFO,console -Dhadoop.policy.file=hadoop-policy.xml -Dhadoop.security.logger=INFO,NullAppender org.apache.hadoop.util.RunJar /opt/cloudera/parcels/CDH-7.1.9-1.cdh7.1.9.p1045.67903105/bin/../lib/hive/lib/hive-beeline-3.1.3000.7.1.9.1045-5.jar org.apache.hive.beeline.BeeLine --hiveconf hive.query.redaction.rules=/opt/cloudera/parcels/CDH-7.1.9-1.cdh7.1.9.p1045.67903105/bin/../lib/hive/conf/redaction-rules.json --hiveconf hive.exec.query.redactor.hooks=org.cloudera.hadoop.hive.ql.hooks.QueryRedactor
+ebbsapp+ 1176508  0.2  0.1 17366756 996252 ?     Sl   Mar26  33:35 /usr/java/jdk1.8/bin/java -cp /CTLFW/RA/ninja/edmp_engineering/spark-3.5.5-bin-hadoop3//conf/:/CTLFW/RA/ninja/edmp_engineering/spark-3.5.5-bin-hadoop3/jars/*:/etc/hadoop/conf/ -Xmx1g -Djava.io.tmpdir=/var/tmp/ -XX:+IgnoreUnrecognizedVMOptions --add-opens=java.base/java.lang=ALL-UNNAMED --add-opens=java.base/java.lang.invoke=ALL-UNNAMED --add-opens=java.base/java.lang.reflect=ALL-UNNAMED --add-opens=java.base/java.io=ALL-UNNAMED --add-opens=java.base/java.net=ALL-UNNAMED --add-opens=java.base/java.nio=ALL-UNNAMED --add-opens=java.base/java.util=ALL-UNNAMED --add-opens=java.base/java.util.concurrent=ALL-UNNAMED --add-opens=java.base/java.util.concurrent.atomic=ALL-UNNAMED --add-opens=java.base/jdk.internal.ref=ALL-UNNAMED --add-opens=java.base/sun.nio.ch=ALL-UNNAMED --add-opens=java.base/sun.nio.cs=ALL-UNNAMED --add-opens=java.base/sun.security.action=ALL-UNNAMED --add-opens=java.base/sun.util.calendar=ALL-UNNAMED --add-opens=java.security.jgss/sun.security.krb5=ALL-UNNAMED -Djdk.reflect.useDirectMethodHandle=false org.apache.spark.deploy.SparkSubmit --master yarn --conf spark.executor.memory=5g --conf spark.sql.catalogImplementation=hive --conf spark.home=/CTLFW/RA/ninja/edmp_engineering/spark-3.5.5-bin-hadoop3 --conf spark.port.maxRetries=50 --conf spark.executor.cores=5 --conf spark.executor.memoryOverhead=5g --conf spark.connect.grpc.binding.port=15000 --conf spark.executor.instances=5 --conf spark.executor.extraJavaOptions=-Djava.io.tmpdir=/var/tmp/ --conf spark.yarn.driver.memory=5g --conf spark.driver.extraJavaOptions=-Djava.io.tmpdir=/var/tmp/ --class org.apache.spark.sql.connect.service.SparkConnectServer --name Spark Connect server spark-internal
+============================================================
+  4. Listening ports (Hive is usually 10000)
+============================================================
+  No Hive/Zookeeper ports found listening.
+============================================================
+  5. Beeline URL from history / wrapper scripts
+============================================================
+/etc/hive/conf.cloudera.hive_on_tez/beeline-site.xml:    <value>jdbc:hive2://hkimou0gbe20a00.hk.standardchartered.com:2181,hkimou0gbe20a01.hk.standardchartered.com:2181,hkimou0gbe20a02.hk.standardchartered.com:2181/;serviceDiscoveryMode=zooKeeper;zooKeeperNamespace=hiveserver2;trustStoreType=jks;sslTrustStore=/var/lib/cloudera-scm-agent/agent-cert/cm-auto-global_truststore.jks;trustStorePassword=G4WrLjcNCarbzhsAsBp7N8xlAfuJQeAovo6mJvrHRdx;keyStoreType=jks;zookeeperKeyStoreType=jks;zookeeperTrustStoreType=jks</value>
+/etc/spark3.3/conf/spark-defaults.conf:spark.sql.hive.hiveserver2.jdbc.url=jdbc:hive2://hkimou0gbe20a00.hk.standardchartered.com:2181,hkimou0gbe20a01.hk.standardchartered.com:2181,hkimou0gbe20a02.hk.standardchartered.com:2181/default;httpPath=cliservice;serviceDiscoveryMode=zooKeeper;ssl=true;sslTrustStore=/var/lib/cloudera-scm-agent/agent-cert/cm-auto-global_truststore.jks;transportMode=http;trustStorePassword=G4WrLjcNCarbzhsAsBp7N8xlAfuJQeAovo6mJvrHRdx;trustStoreType=jks;zooKeeperNamespace=hiveserver2
+/etc/spark3/conf.cloudera.spark3_on_yarn/spark-defaults.conf:spark.sql.hive.hiveserver2.jdbc.url=jdbc:hive2://hkimou0gbe20a00.hk.standardchartered.com:2181,hkimou0gbe20a01.hk.standardchartered.com:2181,hkimou0gbe20a02.hk.standardchartered.com:2181/default;httpPath=cliservice;serviceDiscoveryMode=zooKeeper;ssl=true;sslTrustStore=/var/lib/cloudera-scm-agent/agent-cert/cm-auto-global_truststore.jks;transportMode=http;trustStorePassword=G4WrLjcNCarbzhsAsBp7N8xlAfuJQeAovo6mJvrHRdx;trustStoreType=jks;zooKeeperNamespace=hiveserver2
+/opt/cloudera/parcels/CDH-7.1.9-1.cdh7.1.9.p1045.67903105/lib/oozie/embedded-oozie-server/webapp/docs/DG_Hive2ActionExtension.html:            &lt;jdbc-url&gt;[jdbc:hive2://HOST:10000/default]&lt;/jdbc-url&gt;
+/opt/cloudera/parcels/CDH-7.1.9-1.cdh7.1.9.p1045.67903105/lib/oozie/embedded-oozie-server/webapp/docs/DG_Hive2ActionExtension.html:            &lt;jdbc-url&gt;jdbc:hive2://localhost:10000/default&lt;/jdbc-url&gt;
+/opt/cloudera/parcels/CDH-7.1.9-1.cdh7.1.9.p1045.67903105/lib/hue/apps/beeswax/src/beeswax/hive_site.py:  urlbase = 'jdbc:hive2://%s:%s/default' % (
+/opt/cloudera/parcels/CDH-7.1.9-1.cdh7.1.9.p1045.67903105/lib/hue/apps/beeswax/src/beeswax/tests.py:    assert url == 'jdbc:hive2://' + hostname + ':10000/default'
+/opt/cloudera/parcels/CDH-7.1.9-1.cdh7.1.9.p1045.67903105/lib/hue/apps/beeswax/src/beeswax/tests.py:    assert url == 'jdbc:hive2://server-with-ssl-enabled.com:10000/default'
+/opt/cloudera/parcels/CDH-7.1.9-1.cdh7.1.9.p1045.67903105/lib/hue/apps/beeswax/src/beeswax/tests.py:      'jdbc:hive2://server-with-ssl-enabled.com:10000/default;ssl=true;sslTrustStore=/path/to/truststore.jks;trustStorePassword=password')
+/opt/cloudera/parcels/CDH-7.1.9-1.cdh7.1.9.p1045.67903105/lib/hue/apps/beeswax/src/beeswax/tests.py:      url == 'jdbc:hive2://server-with-ssl-enabled.com:10000/default;ssl=true;sslTrustStore=/etc/ssl-conf/CA_STANDARD/truststore.jks')    
+/opt/cloudera/parcels/CDH-7.1.9-1.cdh7.1.9.p1045.67903105/lib/hue/apps/beeswax/src/beeswax/tests.py:    assert url == 'jdbc:hive2://server-with-ssl-enabled.com:10000/default'
+/opt/cloudera/parcels/CDH-7.1.9-1.cdh7.1.9.p1045.67903105/lib/hue/apps/beeswax/src/beeswax/tests.py:    assert url == 'jdbc:hive2://server-with-ssl-enabled.com:10001/default;transportMode=http;httpPath=cliservice'
+/opt/cloudera/parcels/CDH-7.1.9-1.cdh7.1.9.p1045.67903105/lib/hue/apps/oozie/src/oozie/locale/de/LC_MESSAGES/django.po:msgid "e.g. jdbc:hive2://localhost:10000/default. JDBC URL for the Hive Server 2."
+/opt/cloudera/parcels/CDH-7.1.9-1.cdh7.1.9.p1045.67903105/lib/hue/apps/oozie/src/oozie/locale/de/LC_MESSAGES/django.po:"z. B. jdbc:hive2://localhost:10000/default. JDBC-URL für den Hive-Server "
+/opt/cloudera/parcels/CDH-7.1.9-1.cdh7.1.9.p1045.67903105/lib/hue/apps/oozie/src/oozie/locale/en/LC_MESSAGES/django.po:msgid "e.g. jdbc:hive2://localhost:10000/default. JDBC URL for the Hive Server 2."
+/opt/cloudera/parcels/CDH-7.1.9-1.cdh7.1.9.p1045.67903105/lib/hue/apps/oozie/src/oozie/locale/es/LC_MESSAGES/django.po:msgid "e.g. jdbc:hive2://localhost:10000/default. JDBC URL for the Hive Server 2."
+/opt/cloudera/parcels/CDH-7.1.9-1.cdh7.1.9.p1045.67903105/lib/hue/apps/oozie/src/oozie/locale/es/LC_MESSAGES/django.po:"p. ej., jdbc:hive2://localhost:10000/default. URL de JDBC para el "
+/opt/cloudera/parcels/CDH-7.1.9-1.cdh7.1.9.p1045.67903105/lib/hue/apps/oozie/src/oozie/locale/fr/LC_MESSAGES/django.po:msgid "e.g. jdbc:hive2://localhost:10000/default. JDBC URL for the Hive Server 2."
+/opt/cloudera/parcels/CDH-7.1.9-1.cdh7.1.9.p1045.67903105/lib/hue/apps/oozie/src/oozie/locale/fr/LC_MESSAGES/django.po:"par ex., jdbc:hive2://localhost:10000/default. URL JDBC pour le serveur "
+/opt/cloudera/parcels/CDH-7.1.9-1.cdh7.1.9.p1045.67903105/lib/hue/apps/oozie/src/oozie/locale/ja/LC_MESSAGES/django.po:msgid "e.g. jdbc:hive2://localhost:10000/default. JDBC URL for the Hive Server 2."
+============================================================
+  6. Beeline version + default connection URL
+============================================================
+Version: SLF4J: Class path contains multiple SLF4J bindings.
+SLF4J: Found binding in [jar:file:/opt/cloudera/parcels/CDH-7.1.9-1.cdh7.1.9.p1045.67903105/jars/log4j-slf4j-impl-2.18.0.jar!/org/slf4j/impl/StaticLoggerBinder.class]
+SLF4J: Found binding in [jar:file:/opt/cloudera/parcels/CDH-7.1.9-1.cdh7.1.9.p1045.67903105/jars/slf4j-reload4j-1.7.36.jar!/org/slf4j/impl/StaticLoggerBinder.class]
+SLF4J: See http://www.slf4j.org/codes.html#multiple_bindings for an explanation.
+SLF4J: Actual binding is of type [org.apache.logging.slf4j.Log4jLoggerFactory]
 
+beeline -u '' output (shows default URL hints):
+SLF4J: Class path contains multiple SLF4J bindings.
+SLF4J: Found binding in [jar:file:/opt/cloudera/parcels/CDH-7.1.9-1.cdh7.1.9.p1045.67903105/jars/log4j-slf4j-impl-2.18.0.jar!/org/slf4j/impl/StaticLoggerBinder.class]
+SLF4J: Found binding in [jar:file:/opt/cloudera/parcels/CDH-7.1.9-1.cdh7.1.9.p1045.67903105/jars/slf4j-reload4j-1.7.36.jar!/org/slf4j/impl/StaticLoggerBinder.class]
+SLF4J: See http://www.slf4j.org/codes.html#multiple_bindings for an explanation.
+SLF4J: Actual binding is of type [org.apache.logging.slf4j.Log4jLoggerFactory]
+WARNING: Use "yarn jar" to launch YARN applications.
+SLF4J: Class path contains multiple SLF4J bindings.
+SLF4J: Found binding in [jar:file:/opt/cloudera/parcels/CDH-7.1.9-1.cdh7.1.9.p1045.67903105/jars/log4j-slf4j-impl-2.18.0.jar!/org/slf4j/impl/StaticLoggerBinder.class]
+SLF4J: Found binding in [jar:file:/opt/cloudera/parcels/CDH-7.1.9-1.cdh7.1.9.p1045.67903105/jars/slf4j-reload4j-1.7.36.jar!/org/slf4j/impl/StaticLoggerBinder.class]
+SLF4J: See http://www.slf4j.org/codes.html#multiple_bindings for an explanation.
+============================================================
+  7. Beeline connection test (trying common URLs)
+============================================================
 
-def section(title):
-    print("=" * 60)
-    print(f"  {title}")
-    print("=" * 60)
+Testing: jdbc:hive2://localhost:10000/default
+SLF4J: Class path contains multiple SLF4J bindings.
+SLF4J: Found binding in [jar:file:/opt/cloudera/parcels/CDH-7.1.9-1.cdh7.1.9.p1045.67903105/jars/log4j-slf4j-impl-2.18.0.jar!/org/slf4j/impl/StaticLoggerBinder.class]
+SLF4J: Found binding in [jar:file:/opt/cloudera/parcels/CDH-7.1.9-1.cdh7.1.9.p1045.67903105/jars/slf4j-reload4j-1.7.36.jar!/org/slf4j/impl/StaticLoggerBinder.class]
+SLF4J: See http://www.slf4j.org/codes.html#multiple_bindings for an explanation.
+SLF4J: Actual binding is of type [o
 
+Testing: jdbc:hive2://localhost:10000/
+SLF4J: Class path contains multiple SLF4J bindings.
+SLF4J: Found binding in [jar:file:/opt/cloudera/parcels/CDH-7.1.9-1.cdh7.1.9.p1045.67903105/jars/log4j-slf4j-impl-2.18.0.jar!/org/slf4j/impl/StaticLoggerBinder.class]
+SLF4J: Found binding in [jar:file:/opt/cloudera/parcels/CDH-7.1.9-1.cdh7.1.9.p1045.67903105/jars/slf4j-reload4j-1.7.36.jar!/org/slf4j/impl/StaticLoggerBinder.class]
+SLF4J: See http://www.slf4j.org/codes.html#multiple_bindings for an explanation.
+SLF4J: Actual binding is of type [o
 
-client = connect()
+Testing: jdbc:hive2://localhost:10001/default
+SLF4J: Class path contains multiple SLF4J bindings.
+SLF4J: Found binding in [jar:file:/opt/cloudera/parcels/CDH-7.1.9-1.cdh7.1.9.p1045.67903105/jars/log4j-slf4j-impl-2.18.0.jar!/org/slf4j/impl/StaticLoggerBinder.class]
+SLF4J: Found binding in [jar:file:/opt/cloudera/parcels/CDH-7.1.9-1.cdh7.1.9.p1045.67903105/jars/slf4j-reload4j-1.7.36.jar!/org/slf4j/impl/StaticLoggerBinder.class]
+SLF4J: See http://www.slf4j.org/codes.html#multiple_bindings for an explanation.
+SLF4J: Actual binding is of type [o
 
-# ── 1. Read the beeline error log from the last run ──────────────────────────
-section("1. Last beeline error log")
-out, _ = run(client, "ls -t /tmp/beeline_err_*.log 2>/dev/null | head -3")
-if out:
-    for logfile in out.splitlines():
-        print(f"\n--- {logfile} ---")
-        content, _ = run(client, f"cat '{logfile}'")
-        print(content[:3000] if content else "(empty)")
-else:
-    print("No beeline error logs found in /tmp/")
+Testing: jdbc:hive2://0.0.0.0:10000/default
+SLF4J: Class path contains multiple SLF4J bindings.
+SLF4J: Found binding in [jar:file:/opt/cloudera/parcels/CDH-7.1.9-1.cdh7.1.9.p1045.67903105/jars/log4j-slf4j-impl-2.18.0.jar!/org/slf4j/impl/StaticLoggerBinder.class]
+SLF4J: Found binding in [jar:file:/opt/cloudera/parcels/CDH-7.1.9-1.cdh7.1.9.p1045.67903105/jars/slf4j-reload4j-1.7.36.jar!/org/slf4j/impl/StaticLoggerBinder.class]
+SLF4J: See http://www.slf4j.org/codes.html#multiple_bindings for an explanation.
+SLF4J: Actual binding is of type [o
+============================================================
+  8. Zookeeper check (needed for HA clusters)
+============================================================
+/etc/hive/conf.cloudera.hive_on_tez/atlas-application.properties:atlas.kafka.zookeeper.connection.timeout.ms=30000
+/etc/hive/conf.cloudera.hive_on_tez/beeline-site.xml:    <value>jdbc:hive2://hkimou0gbe20a00.hk.standardchartered.com:2181,hkimou0gbe20a01.hk.standardchartered.com:2181,hkimou0gbe20a02.hk.standardchartered.com:2181/;serviceDiscoveryMode=zooKeeper;zooKeeperNamespace=hiveserver2;trustStoreType=jks;sslTrustStore=/var/lib/cloudera-scm-agent/agent-cert/cm-auto-global_truststore.jks;trustStorePassword=G4WrLjcNCarbzhsAsBp7N8xlAfuJQeAovo6mJvrHRdx;keyStoreType=jks;zookeeperKeyStoreType=jks;zookeeperTrustStoreType=jks</value>
+/etc/hive/conf.cloudera.hive_on_tez/core-site.xml:    <name>ha.zookeeper.quorum</name>
+/etc/hive/conf.cloudera.hive_on_tez/hdfs-site.xml:    <name>ha.zookeeper.quorum</name>
+/etc/hive/conf.cloudera.hive_on_tez/hive-site.xml:    <name>hive.zookeeper.quorum</name>
+/etc/hive/conf.cloudera.hive_on_tez/hive-site.xml:    <name>hbase.zookeeper.quorum</name>
+/etc/hive/conf.cloudera.hive_on_tez/hive-site.xml:  <!--'hive.server2.zookeeper.namespace', originally set to 'hiveserver2' (non-final), is overridden below by a safety valve-->
+/etc/hive/conf.cloudera.hive_on_tez/hive-site.xml:    <name>hive.server2.zookeeper.namespace</name>
+/etc/hive/conf.cloudera.hive/atlas-application.properties:atlas.kafka.zookeeper.connection.timeout.ms=30000
+/etc/hive/conf.cloudera.hive/core-site.xml:    <name>ha.zookeeper.quorum</name>
+============================================================
+  9. Hive environment
+============================================================
+JAVA_HOME=/usr/java/jdk
+HDFS_F1_PATH=/sit_enc/grid/td/hdpcf/df/f1
+HDFS_BASE=/sit_enc/grid/td
+beeline_connstring=jdbc:hive2://hkimou0gbe20a00.hk.standardchartered.com:2181,hkimou0gbe20a01.hk.standardchartered.com:2181,hkimou0gbe20a02.hk.standardchartered.com:2181/default;httpPath=cliservice;principal=hive/_HOST@ZONE1.SCBDEV.NET;serviceDiscoveryMode=zooKeeper;ssl=true;sslTrustStore=/var/lib/cloudera-scm-agent/agent-cert/cm-auto-global_truststore.jks;transportMode=http;trustStorePassword=G4WrLjcNCarbzhsAsBp7N8xlAfuJQeAovo6mJvrHRdx;trustStoreType=jks;zooKeeperNamespace=hiveserver2
+CUSTOM_SPARK=/CTRLFW/GRID/uat/custom_spark/spark-3.5.5-bin-hadoop3
+PATH=/home/gridappuat/.local/bin:/home/gridappuat/bin:/usr/java/jdk/bin:/usr/local/bin:/usr/bin:/usr/local/sbin:/usr/sbin:/opt/tss/bin:/opt/tss/itrs:/opt/puppetlabs/bin:/opt/teradata/client/17.20/bin
 
-# ── 2. Find hive-site.xml and show HiveServer2 settings ──────────────────────
-section("2. HiveServer2 config from hive-site.xml")
-out, _ = run(client,
-    "find /etc /usr/lib /usr/local /opt /home -name hive-site.xml 2>/dev/null | head -5")
-print("hive-site.xml locations found:")
-print(out or "  (none found)")
+HIVE_HOME / HADOOP_HOME / JAVA_HOME: /usr/java/jdk
 
-if out:
-    for f in out.splitlines()[:2]:
-        print(f"\n--- thrift entries in {f} ---")
-        grep, _ = run(client, f"grep -A1 'thrift\\|server2\\|zookeeper' '{f}' 2>/dev/null | head -60")
-        print(grep or "  (no matches)")
-
-# ── 3. Check if HiveServer2 is actually running ───────────────────────────────
-section("3. HiveServer2 process check")
-out, _ = run(client, "ps aux 2>/dev/null | grep -i 'hiveserver2\\|HiveServer2' | grep -v grep")
-print(out or "  HiveServer2 process NOT found running on this node.")
-
-out2, _ = run(client, "ps aux 2>/dev/null | grep -i 'RunJar\\|hive' | grep -v grep | head -5")
-print("\nOther Hive-related processes:")
-print(out2 or "  (none)")
-
-# ── 4. Check what ports are listening ─────────────────────────────────────────
-section("4. Listening ports (Hive is usually 10000)")
-out, _ = run(client, "ss -tlnp 2>/dev/null | grep -E '10000|10001|2181|9083' || "
-                     "netstat -tlnp 2>/dev/null | grep -E '10000|10001|2181|9083'")
-print(out or "  No Hive/Zookeeper ports found listening.")
-
-# ── 5. Try to find the beeline connection URL from shell history / scripts ───
-section("5. Beeline URL from history / wrapper scripts")
-out, _ = run(client,
-    "grep -r 'jdbc:hive2' /etc /usr/lib /usr/local /opt /home "
-    "~/.bash_history 2>/dev/null | grep -v '.pyc\\|Binary' | head -20")
-print(out or "  No jdbc:hive2 URLs found in common locations.")
-
-# ── 6. Show beeline version and default URL ───────────────────────────────────
-section("6. Beeline version + default connection URL")
-out, err = run(client, "beeline --version 2>&1 | head -5")
-print("Version:", out or err)
-
-out, err = run(client, "beeline -u '' 2>&1 | head -10")
-print("\nbeeline -u '' output (shows default URL hints):")
-print(out or err)
-
-# ── 7. Test beeline with a simple query on common URLs ───────────────────────
-section("7. Beeline connection test (trying common URLs)")
-
-test_urls = [
-    "jdbc:hive2://localhost:10000/default",
-    "jdbc:hive2://localhost:10000/",
-    "jdbc:hive2://localhost:10001/default",
-    "jdbc:hive2://0.0.0.0:10000/default",
-]
-
-# Also try any URL found in step 5
-import re
-if out:
-    found = re.findall(r"jdbc:hive2://[^\s'\"]+", out)
-    for u in found[:3]:
-        if u not in test_urls:
-            test_urls.insert(0, u)
-
-for url in test_urls:
-    print(f"\nTesting: {url}")
-    test_cmd = (
-        f"beeline --silent=true --outputformat=csv2 --showHeader=true "
-        f"-u \"{url}\" "
-        f"-e 'SHOW DATABASES;' "
-        f"2>&1 | head -20"
-    )
-    out, err = run(client, test_cmd, timeout=20)
-    result = (out + err).strip()
-    if result:
-        print(result[:500])
-        if "Error" not in result and "Exception" not in result:
-            print(f"\n[FOUND WORKING URL]: {url}")
-            break
-    else:
-        print("  (no output)")
-
-# ── 8. Check if Zookeeper-based HiveServer2 URL is needed ────────────────────
-section("8. Zookeeper check (needed for HA clusters)")
-out, _ = run(client,
-    "grep -r 'zookeeper\\|ZooKeeper\\|zoo.cfg' /etc/zookeeper /etc/hive 2>/dev/null "
-    "| grep -i 'server\\|connect\\|quorum' | head -10")
-print(out or "  No Zookeeper config found.")
-
-# ── 9. Check hive env / hadoop config ────────────────────────────────────────
-section("9. Hive environment")
-out, _ = run(client, "env 2>/dev/null | grep -iE 'hive|hadoop|java|hdfs' | head -20")
-print(out or "  (no Hive/Hadoop env vars)")
-
-out2, _ = run(client, "echo $HIVE_HOME $HADOOP_HOME $JAVA_HOME")
-print("\nHIVE_HOME / HADOOP_HOME / JAVA_HOME:", out2)
-
-client.close()
-print("\n" + "=" * 60)
-print("  Debug complete. Share the output above to get the fix.")
-print("=" * 60)
+============================================================
+  Debug complete. Share the output above to get the fix.
+============================================================
