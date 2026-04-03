@@ -1,519 +1,595 @@
+"""
+hive_downloader.py
+==================
+Hive -> local CSV using ONLY SSH credentials (host, user, password, port).
 
-df = pd.DataFrame({
-    "Process Type": [
-        "Default", "Map", "Map",
-        "Default", "Map", "Map",
-        "Map", "Map", "Default", "Map"
-    ],
-    "Rule Name": [
-        "R1", "R1", "R1",
-        "R2", "R2", "R2",
-        "R3", "R3", "R3", "R4"
-    ],
-    "Source Object Name": [
-        None, "ObjA", "ObjB",
-        None, "ObjX", "ObjY",
-        "ObjM", "ObjN", None, "ObjP"
-    ],
-    "Source Attributes Name": [
-        None, "Attr1", "Attr2",
-        None, "Code1", "Code2",
-        "Field1", "Field2", None, "FieldP"
-    ],
-    "Map Note": [
-        "Default Note R1", "Mapped A", "Mapped B",
-        "Default Note R2", "Mapped X", "Mapped Y",
-        "Mapped M", "Mapped N", "Default Note R3", "Mapped P"
-    ]
-})
+No direct Hive/HDFS/PyHive access needed from your local machine.
+Everything runs through SSH.
 
+Auto-detects what is available on the server and picks the best strategy:
 
-def transform_rules(df):
+  Priority 1 - HDFS parallel   : INSERT OVERWRITE -> hdfs dfs -getmerge -> SFTP
+  Priority 2 - Beeline + SFTP  : beeline -> remote CSV file -> SFTP stream
+  Priority 3 - Beeline stdout  : beeline piped directly (small data fallback)
 
-    # Quote map notes for default rows
-    df["Map Note"] = df.apply(
-        lambda x: f"\"{x['Map Note']}\"" if x["Process Type"] == "Default" else x["Map Note"],
-        axis=1
-    )
+Install (local machine only):
+    pip install paramiko
 
-    # Build the source for non-default rows
-    df["Source"] = df.apply(
-        lambda x: None if x["Process Type"] == "Default" 
-        else f"{x['Source Object Name']}.{x['Source Attributes Name']}",
-        axis=1
-    )
+Usage:
+    python hive_downloader.py \\
+        --query "SELECT * FROM schema.tablename LIMIT 100" \\
+        --output ./output.csv
 
-    output_rows = []
+    Or import and call directly:
+        from hive_downloader import export_hive_to_csv
+        export_hive_to_csv("SELECT * FROM big_table", "./out.csv")
+"""
 
-    for rule, group in df.groupby("Rule Name"):
+import csv
+import os
+import time
+import logging
+import paramiko
+from pathlib import Path
+from typing import Optional
 
-        if "Default" in group["Process Type"].values:
-            # Only take the default row
-            default_row = group[group["Process Type"] == "Default"].iloc[0]
-            output_rows.append({
-                "Rule Name": rule,
-                "Map Note": default_row["Map Note"],
-                "Source": None
-            })
-
-        else:
-            # No default → pivot all sources
-            sources = "[" + ", ".join(group["Source"].dropna().unique()) + "]"
-            output_rows.append({
-                "Rule Name": rule,
-                "Map Note": group.iloc[0]["Map Note"],
-                "Source": sources
-            })
-
-    return pd.DataFrame(output_rows)
+# ---- Logging ----------------------------------------------------------------
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(message)s",
+)
+log = logging.getLogger(__name__)
 
 
-
-col 1 -> Rule Name (without Duplicates)
-col 2 -> Map Note (Check the column Process Type= "Default" the value in Map Note should come with double quotes "Map Note Value" and Source column value should be null else perform column operation )
-col 3 -> Source (Cobination of , if more than one Rule Name all values of colum Source Object Name.Source Object Name should come inside [Source Object Name.Source Object Name] simplly have to be pivot)
-
- Data frame consists of column(Process Type,Rule Name,Source Object Name,Source Attributes Name,Map Note)
- out put dataframe needs ,(Rule Name, Map Note, Source)
-
-import numpy as np
-
-df["query"] = np.where(
-    df["data_processing_rule"].str.strip() != "", 
-    df["data_processing_rule"] + " AS " + df["target_attribute_name"],
-    df["source_object_name"] + "." + df["source_attribute_name"] + " AS " + df["target_attribute_name"]
+# ---- SSH Credentials  (edit here or override via CLI) -----------------------
+SSH_CONFIG = dict(
+    ssh_host     = "10.83.212.30",
+    ssh_user     = "gridappuat",
+    ssh_password = "123456789@S",
+    ssh_port     = 22,
 )
 
-
-Subject: Clarification Required on Tokenization Handling for prty_srogt_id in c_aprvd_lmt Table
-Hi Team,
-We have identified an issue related to the prty_srogt_id column in the c_aprvd_lmt core table. This table is built using the combination of two map group IDs (i.e., it derives values from two different source tables).
-In the current setup:
-From Table 1, the relationship_no column is tokenised.
-From Table 2, the relationship_no column is not tokenised.
-Since the target column prty_srogt_id is populated using values coming from both tables, the resulting data is a mix of tokenised and non-tokenised values. During YAML development, when we attempt to un-tokenise this column, we need clarity on how this should be handled.
-Request for clarification:
-Should we perform un-tokenisation only on the specific tokenised values coming from Table 1?
-OR
-Should the relationship_no column in Table 2 also be tokenised for consistency, so that the target column contains only uniformly tokenised data?
-Please confirm the expected approach so we can proceed accordingly.
+# ---- Tuneable constants -----------------------------------------------------
+REMOTE_TMP_DIR     = "/tmp/hive_dl"       # writable scratch dir on the server
+SFTP_CHUNK_BYTES   = 4 * 1024 * 1024      # 4 MB per SFTP read
+BEELINE_FETCH_SIZE = 10_000               # rows per JDBC round-trip
+MAX_RETRIES        = 3
+RETRY_DELAY_SEC    = 5
+CMD_TIMEOUT_SEC    = 7200                 # 2 h max for large exports
+COUNT_TIMEOUT_SEC  = 600                  # 10 min for COUNT(*)
+HDFS_THRESHOLD     = 500_000             # switch to HDFS above this row count
 
 
-subject:%20Clarification%20Required%20on%20Tokenization%20Handling%20for%20prty_srogt_id%20in%20c_aprvd_lmt%20Table%0AHi%20Team,%0AWe%20have%20identified%20an%20issue%20related%20to%20the%20prty_srogt_id%20column%20in%20the%20c_aprvd_lmt%20core%20table.%20This%20table%20is%20built%20using%20the%20combination%20of%20two%20map%20group%20IDs%20(i.e.,%20it%20derives%20values%20from%20two%20different%20source%20tables).%0AIn%20the%20current%20setup%3A%0AFrom%20Table%201,%20the%20relationship_no%20column%20is%20tokenised.%0AFrom%20Table%202,%20the%20relationship_no%20column%20is%20not%20tokenised.%0ASince%20the%20target%20column%20prty_srogt_id%20is%20populated%20using%20values%20coming%20from%20both%20tables,%20the%20resulting%20data%20is%20a%20mix%20of%20tokenised%20and%20non-tokenised%20values.%20During%20YAML%20development,%20when%20we%20attempt%20to%20un-tokenise%20this%20column,%20we%20need%20clarity%20on%20how%20this%20should%20be%20handled.%0ARequest%20for%20clarification%3A%0AShould%20we%20perform%20un-tokenisation%20only%20on%20the%20specific%20tokenised%20values%20coming%20from%20Table%201?%0AOR%0AShould%20the%20relationship_no%20column%20in%20Table%202%20also%20be%20tokenised%20for%20consistency,%20so%20that%20the%20target%20column%20contains%20only%20uniformly%20tokenised%20data?%0APlease%20confirm%20the%20expected%20approach%20so%20we%20can%20proceed%20accordingly.
+# =============================================================================
+# SSH helpers
+# =============================================================================
+
+def _connect() -> paramiko.SSHClient:
+    client = paramiko.SSHClient()
+    client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+    client.connect(
+        hostname = SSH_CONFIG["ssh_host"],
+        port     = SSH_CONFIG["ssh_port"],
+        username = SSH_CONFIG["ssh_user"],
+        password = SSH_CONFIG["ssh_password"],
+        timeout  = 30,
+    )
+    log.info("SSH connected  ->  %s@%s:%s",
+             SSH_CONFIG["ssh_user"], SSH_CONFIG["ssh_host"], SSH_CONFIG["ssh_port"])
+    return client
 
 
-Core and ADM HQL development has been completed, and we’ve sent an email to Priya and Saraswathi for testing.
-YAML creation is in progress, and we are concurrently updating the YAML files based on the latest mapping sheets.
-The security matrix for naen views has been approved today, and we will start the YAML testing.
+def _run(client: paramiko.SSHClient, cmd: str,
+         timeout: int = 60, silent: bool = False) -> tuple:
+    """
+    Run a shell command via SSH.
+    Returns (stdout_str, stderr_str).
+    Uses a low-level channel so we get the real exit code.
+    """
+    transport = client.get_transport()
+    chan = transport.open_session()
+    chan.settimeout(timeout)
+    chan.exec_command(cmd)
+
+    stdout_buf, stderr_buf = b"", b""
+    while not chan.exit_status_ready():
+        if chan.recv_ready():
+            stdout_buf += chan.recv(65536)
+        if chan.recv_stderr_ready():
+            stderr_buf += chan.recv_stderr(65536)
+        time.sleep(0.05)
+    while chan.recv_ready():
+        stdout_buf += chan.recv(65536)
+    while chan.recv_stderr_ready():
+        stderr_buf += chan.recv_stderr(65536)
+
+    out = stdout_buf.decode("utf-8", errors="replace").strip()
+    err = stderr_buf.decode("utf-8", errors="replace").strip()
+    if err and not silent:
+        log.debug("STDERR: %s", err[:400])
+    return out, err
 
 
-SELECT COUNT(*) 
-FROM (
-    SELECT
-        WEP.PRTY_SROGT_ID AS PRTY_SROGT_ID,
-        WEP.DOM_PRTY_REF AS DOM_PRTY_REF,
-        CASE 
-            WHEN TRIM(WEP.PROFILE_ID) IS NOT NULL AND TRIM(WEP.PROFILE_ID) != '' 
-                THEN CONCAT(WEP.DATA_SRC_ICM, '-', WEP.SOURCE_COUNTRY_CODE_ICM, '-', WEP.PSEUDO_KEY)
-            WHEN TRIM(WEP.PROFILE_ID) IS NULL OR TRIM(WEP.PROFILE_ID) = '' 
-                THEN NULL 
-        END AS ENTRP_PRTY_SROGT_ID,
-
-        CASE 
-            WHEN TRIM(WEP.PROFILE_ID) IS NOT NULL AND TRIM(WEP.PROFILE_ID) != '' 
-                THEN WEP.PROFILE_ID
-            ELSE NULL
-        END AS ENTRP_PRTY_REF,
-
-        CASE 
-            WHEN WEP.PRTY_TYPE_CD = 'I' THEN NULL
-            WHEN WEP.PRTY_TYPE_CD <> 'I' THEN 
-                CASE 
-                    WHEN (WEP.DOM_MAST_REF IS NULL OR WEP.DOM_MAST_REF = '') THEN NULL
-                    WHEN WEP.DOM_MAST_REF IS NOT NULL THEN 
-                        CASE 
-                            WHEN TRIM(WEP.CLIENTID) IS NOT NULL AND TRIM(WEP.CLIENTID) != '' 
-                                THEN CONCAT('DCB', '-', 'XX-', TRIM(WEP.CLIENTID)) 
-                            WHEN TRIM(WEP.CLIENTID) IS NULL OR TRIM(WEP.CLIENTID) = '' 
-                                THEN CONCAT('SCI', '-', 'XX-', TRIM(WEP.LE_ID)) 
-                            ELSE NULL
-                        END
-                    ELSE NULL
-                END
-            ELSE NULL 
-        END AS ENTRP_PARNT_PRTY_SROGT_ID,
-
-        CASE 
-            WHEN WEP.PRTY_TYPE_CD = 'I' THEN NULL
-            WHEN WEP.PRTY_TYPE_CD <> 'I' THEN 
-                CASE 
-                    WHEN (WEP.DOM_MAST_REF IS NULL OR WEP.DOM_MAST_REF = '') THEN NULL
-                    WHEN WEP.DOM_MAST_REF IS NOT NULL THEN TRIM(WEP.CLIENTID)
-                    WHEN (TRIM(WEP.CLIENTID) IS NULL OR TRIM(WEP.CLIENTID) = '') 
-                         AND (TRIM(WEP.LE_ID) IS NOT NULL AND TRIM(WEP.LE_ID) != '') 
-                        THEN CONCAT(TRIM(WEP.LE_ID), '-', TRIM(WEP.SP_ID))
-                    ELSE NULL 
-                END
-            ELSE NULL
-        END AS ENTRP_PARNT_PRTY_HOST_NUM,
-
-        TRIM(WEP.DOM_MAST_REF) AS DOM_MAST_REF,
-
-        CASE 
-            WHEN TRIM(WEP.PROFILE_ID) IS NOT NULL AND TRIM(WEP.PROFILE_ID) != '' 
-                 AND (TRIM(WEP.LE_ID) IS NULL OR TRIM(WEP.LE_ID) = '') 
-                THEN NULL
-            WHEN TRIM(WEP.PROFILE_ID) IS NOT NULL AND TRIM(WEP.PROFILE_ID) != '' 
-                 AND (TRIM(WEP.LE_ID) IS NOT NULL AND TRIM(WEP.LE_ID) != '') 
-                THEN '-1i'
-            WHEN (TRIM(WEP.PROFILE_ID) IS NULL OR TRIM(WEP.PROFILE_ID) = '') 
-                 AND (TRIM(WEP.LE_ID) IS NOT NULL AND TRIM(WEP.LE_ID) != '') 
-                THEN '-2i'
-            WHEN (TRIM(WEP.PROFILE_ID) IS NULL OR TRIM(WEP.PROFILE_ID) = '') 
-                 AND (TRIM(WEP.LE_ID) IS NULL OR TRIM(WEP.LE_ID) = '') 
-                THEN '-3i'
-        END AS MAST_PATN_TP_CD,
-
-        CASE 
-            WHEN TRIM(WEP.PROFILE_ID) IS NOT NULL AND TRIM(WEP.PROFILE_ID) != '' 
-                 AND (TRIM(WEP.LE_ID) IS NULL OR TRIM(WEP.LE_ID) = '')  
-                THEN NULL
-            WHEN TRIM(WEP.PROFILE_ID) IS NOT NULL AND TRIM(WEP.PROFILE_ID) != '' 
-                 AND (TRIM(WEP.LE_ID) IS NOT NULL AND TRIM(WEP.LE_ID) != '')  
-                THEN 'Individual RELATIONSHIPNO with both SCI and ICM ID Exist'
-            WHEN (TRIM(WEP.PROFILE_ID) IS NULL OR TRIM(WEP.PROFILE_ID) = '') 
-                 AND (TRIM(WEP.LE_ID) IS NOT NULL AND TRIM(WEP.LE_ID) != '')  
-                THEN 'Individual RELATIONSHIPNO with ICM ID not available but SCI ID available'
-            WHEN (TRIM(WEP.PROFILE_ID) IS NULL OR TRIM(WEP.PROFILE_ID) = '') 
-                 AND (TRIM(WEP.LE_ID) IS NULL OR TRIM(WEP.LE_ID) = '') 
-                THEN 'Individual RELATIONSHIPNO with both ICM and SCI ID not available'
-        END AS MAST_PATN_TP_DESC,
-
-        WEP.INST_CLAS_CD AS INST_CLAS_CD,
-        WEP.INST_CLAS_DESC AS INST_CLAS_DESC,
-        WEP.SCB_STAF_FL AS SCB_STAF_FL,
-        WEP.ISIC_CD AS ISIC_CD,
-        WEP.ISIC_DESC AS ISIC_DESC,
-        WEP.SEGMT_EFF_DT AS SEGMT_EFF_DT,
-        '@DATA_SRC_EBB@' AS DATA_SRC,
-        '@SOURCE_COUNTRY_CODE@' AS SOURCE_COUNTRY_CODE,
-        '@ACCS_CTRY_CD@' AS ACCS_CTRY_CD,
-
-        CASE 
-            WHEN (TRIM(WEP.DOM_MAST_REF) IS NULL OR TRIM(WEP.DOM_MAST_REF) = '') THEN NULL
-            WHEN TRIM(WEP.DOM_MAST_REF) IS NOT NULL AND TRIM(WEP.DOM_MAST_REF) != '' THEN PSE.ACCS_SEGMT_CD_PSEUDO 
-            WHEN (TRIM(WEP.LE_ID) IS NULL OR TRIM(WEP.LE_ID) = '') THEN NULL
-            ELSE NULL 
-        END AS ACCS_SEGMT_CD,
-
-        'EBB~ID~W_ENTRP_PRTY~C_CRTD_CORE_PRTY~1' AS PROCESS_ID
-
-    FROM 
-        (
-            SELECT * 
-            FROM (
-                SELECT 
-                    *, 
-                    ROW_NUMBER() OVER (
-                        PARTITION BY PRTY_SROGT_ID 
-                        ORDER BY MAST_OPEN_DT DESC,
-                            CASE 
-                                WHEN (TRIM(LE_ID) IS NULL OR TRIM(LE_ID) = '') THEN 0 
-                                ELSE 1 
-                            END DESC
-                    ) AS ROWNUMBER
-                FROM UAT1_TB_DHUB_PRIM_WORK.W_ENTRP_PRTY  
-                WHERE PROCESS_DATE = '20241231' 
-                  AND DATA_SRC = 'EBB' 
-                  AND SOURCE_COUNTRY_CODE = 'ID'
-                  AND PRTY_TYPE_CD <> 'I'
-            ) t
-            WHERE t.ROWNUMBER = 1
-        ) WEP
-        LEFT JOIN (
-            SELECT * 
-            FROM UAT1_TB_DHUB_PRIM_WORK.C_PSEUDO_PRTY 
-            WHERE DATA_SRC = 'SCI' AND SOURCE_COUNTRY_CODE = 'ID'
-        ) PSC ON CONCAT(TRIM(WEP.LE_ID), '-', TRIM(WEP.SP_ID)) = PSC.SRC_KEY1
-        LEFT JOIN (
-            SELECT * 
-            FROM UAT1_TB_DHUB_PRIM_WORK.C_PSEUDO_PRTY 
-            WHERE DATA_SRC = 'ICM'
-        ) PSI ON TRIM(WEP.PROFILE_ID) = TRIM(PSI.SRC_KEY2)
-              AND WEP.SOURCE_COUNTRY_CODE = PSI.SOURCE_COUNTRY_CODE
-) temp;
-
-------------------------------
-import paramiko
-import pandas as pd
-import numpy as np
-import re
-
-# Function to establish SSH connection
-def establish_ssh_connection(host, user, password, port=22):
+def _file_size(client: paramiko.SSHClient, path: str) -> int:
+    out, _ = _run(client, f"stat -c%s '{path}' 2>/dev/null || echo 0", silent=True)
     try:
-        ssh_client = paramiko.SSHClient()
-        ssh_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-        ssh_client.connect(host, port=port, username=user, password=password)
-        print("✅ SSH Connection Established")
-        return ssh_client
-    except Exception as e:
-        print(f"❌ SSH connection failed: {e}")
+        return int(out.strip())
+    except ValueError:
+        return 0
+
+
+# =============================================================================
+# Server capability detection
+# =============================================================================
+
+def _detect_capabilities(client: paramiko.SSHClient) -> dict:
+    log.info("Probing server tools ...")
+    caps = {}
+    for tool, cmd in [
+        ("beeline",  "which beeline 2>/dev/null"),
+        ("hive_cli", "which hive   2>/dev/null"),
+        ("hdfs_cli", "which hdfs   2>/dev/null"),
+    ]:
+        out, _ = _run(client, cmd, silent=True)
+        caps[tool] = bool(out.strip())
+        log.info("  %-10s %s", tool, "found" if caps[tool] else "not found")
+
+    # Verify HDFS is actually reachable (not just the binary existing)
+    if caps["hdfs_cli"]:
+        out, _ = _run(client, "hdfs dfs -ls / 2>/dev/null | head -1",
+                      silent=True, timeout=20)
+        caps["hdfs_ok"] = bool(out.strip())
+    else:
+        caps["hdfs_ok"] = False
+    log.info("  %-10s %s", "hdfs_fs", "reachable" if caps["hdfs_ok"] else "not reachable")
+    return caps
+
+
+# =============================================================================
+# JDBC URL auto-discovery
+# =============================================================================
+
+def _find_jdbc_url(client: paramiko.SSHClient) -> str:
+    """
+    Try to read HiveServer2 host/port from hive-site.xml on the server.
+    Falls back to jdbc:hive2://localhost:10000/default if nothing found.
+    """
+    import re
+
+    host, port = "localhost", "10000"
+
+    # Common hive-site.xml locations
+    search_cmd = (
+        "find /etc /usr/lib /usr/local /opt -name hive-site.xml 2>/dev/null "
+        "| head -5 | xargs grep -h 'thrift' 2>/dev/null | head -40"
+    )
+    out, _ = _run(client, search_cmd, silent=True, timeout=15)
+
+    if "thrift.port" in out:
+        m = re.search(r"<name>hive\.server2\.thrift\.port</name>\s*<value>(\d+)</value>", out)
+        if m:
+            port = m.group(1)
+
+    if "thrift.bind.host" in out:
+        m = re.search(r"<name>hive\.server2\.thrift\.bind\.host</name>\s*<value>([^<]+)</value>", out)
+        if m and m.group(1).strip() not in ("", "0.0.0.0"):
+            host = m.group(1).strip()
+
+    jdbc = f"jdbc:hive2://{host}:{port}/default"
+    log.info("JDBC URL: %s", jdbc)
+    return jdbc
+
+
+# =============================================================================
+# Beeline command builder
+# =============================================================================
+
+def _beeline_cmd(jdbc: str, hql: str, remote_out: str) -> str:
+    hql_esc = hql.replace("'", "'\\''")
+    return (
+        f"beeline --fetchSize={BEELINE_FETCH_SIZE} "
+        f"--silent=true --outputformat=csv2 --showHeader=true "
+        f"--nullemptystring=true "
+        f"-u \"{jdbc}\" "
+        f"-e '{hql_esc}' "
+        f"> '{remote_out}' 2>/tmp/beeline_err_$$.log"
+    )
+
+
+# =============================================================================
+# Row count estimate (used to pick strategy)
+# =============================================================================
+
+def _estimate_rows(client: paramiko.SSHClient, jdbc: str, query: str) -> Optional[int]:
+    hql    = f"SELECT COUNT(*) FROM ({query}) __cnt__"
+    remote = f"{REMOTE_TMP_DIR}/__cnt_{int(time.time())}.csv"
+
+    log.info("Estimating row count (may take a minute) ...")
+    _run(client, _beeline_cmd(jdbc, hql, remote),
+         timeout=COUNT_TIMEOUT_SEC, silent=True)
+
+    if _file_size(client, remote) == 0:
+        log.warning("COUNT(*) returned no output — will skip estimate.")
         return None
 
-# Function to run Beeline query and download result as CSV
-def run_beeline_and_download_csv(ssh_client, query, remote_csv="/tmp/hive_output.csv", local_csv="hive_output.csv"):
     try:
-        username = ssh_client.get_transport().get_username()
-        query = f"set hive.mapred.mode=nonstrict; {query}"
-        # Build the Beeline command
-        beeline_cmd = f'beeline -n {username} --outputformat=csv2 -e "{query}" > {remote_csv}'
-
-        # Run Beeline remotely
-        stdin, stdout, stderr = ssh_client.exec_command(beeline_cmd)
-        exit_status = stdout.channel.recv_exit_status()
-
-        error = stderr.read().decode().strip()
-        if exit_status != 0 or "ERROR" in error.upper():
-            print(f"⚠️ Beeline failed:\n{error}")
-            return None
-
-        # Download the file via SFTP
-        sftp = ssh_client.open_sftp()
-        sftp.get(remote_csv, local_csv)
-        sftp.remove(remote_csv)
+        sftp = client.open_sftp()
+        with sftp.open(remote) as f:
+            content = f.read().decode("utf-8", errors="replace")
+        sftp.remove(remote)
         sftp.close()
-
-        return local_csv
-
     except Exception as e:
-        print(f"❌ Error during Beeline or download: {e}")
+        log.warning("Could not read count file: %s", e)
         return None
-        
-        
-# Data Cleaning Function
-def data_cleaning(dataframe):
-    dataframe.columns = [re.sub('[^a-zA-Z0-9]', '', names.lower()) for names in dataframe.columns.values]
-    dataframe.fillna('no_value', inplace=True)
-    dataframe = dataframe.astype("str")
-    dataframe.sort_index(axis=1, inplace=True)
-    dataframe.sort_values(by=list(dataframe.columns), inplace=True)
-    dataframe.reset_index(inplace=True, drop=True)
-    return dataframe
 
-# Column Identification Function
-def column_identification(df, variable):
-    df_cols_to_drop = []
-    for i in df.columns:
-        k = re.sub('[^a-zA-Z0-9]', '', i.lower())
-        for j in variable:
-            j = re.sub('[^a-zA-Z0-9]', '', j.lower())
-            if k == j:
-                df_cols_to_drop.append(i)
-    return df_cols_to_drop
+    for line in content.splitlines():
+        val = line.strip().strip('"')
+        if val.isdigit():
+            count = int(val)
+            log.info("Estimated rows: %s", f"{count:,}")
+            return count
+    return None
 
-    
 
-# Main script logic
-def main():
-    print("🔐 SSH to Hive Server")
+# =============================================================================
+# Column header extraction
+# =============================================================================
 
-    # --- SSH DETAILS ---
-    #
-    ssh_host = input("Hostname/IP: ").strip()
-    ssh_user = input("Username: ").strip()
-    ssh_password = input("Password: ").strip()
-    ssh_port = 22  # Or customize if needed
+def _get_headers(client: paramiko.SSHClient, jdbc: str, query: str) -> list:
+    """
+    Run LIMIT 0 via beeline to capture the column header line.
+    INSERT OVERWRITE strips headers, so we fetch them separately.
+    """
+    remote = f"{REMOTE_TMP_DIR}/__hdr_{int(time.time())}.csv"
+    hql    = f"SELECT * FROM ({query}) __h__ LIMIT 0"
+    _run(client, _beeline_cmd(jdbc, hql, remote), timeout=120, silent=True)
 
-    # Connect via SSH
-    ssh_client = establish_ssh_connection(ssh_host, ssh_user, ssh_password, ssh_port)
-    if not ssh_client:
-        return
+    try:
+        sftp = client.open_sftp()
+        with sftp.open(remote) as f:
+            first_line = f.readline().decode("utf-8", errors="replace").strip()
+        sftp.remove(remote)
+        sftp.close()
+        cols = next(csv.reader([first_line]))
+        # Beeline often prefixes "tablename.colname" -- strip that
+        cleaned = [c.split(".")[-1].strip('"').strip() for c in cols if c.strip()]
+        if cleaned:
+            preview = ", ".join(cleaned[:8]) + (" ..." if len(cleaned) > 8 else "")
+            log.info("Columns (%d): %s", len(cleaned), preview)
+            return cleaned
+    except Exception as e:
+        log.warning("Header extraction failed: %s", e)
+    return []
 
-    # --- QUERY1 INPUT ---
-    print("\n📥 Enter your actual table query (end with a semicolon `;`):")
-    query = input().strip()
 
-    # Run Beeline and get CSV
-    local_csv_path = run_beeline_and_download_csv(ssh_client, query)
+# =============================================================================
+# SFTP download helper
+# =============================================================================
 
-    # Load into pandas DataFrame
-    if local_csv_path:
-        try:
-            df2 = pd.read_csv(local_csv_path)
-        except Exception as e:
-            print(f"❌ Failed to read CSV: {e}")
-            
-    # --- QUERY2 INPUT ---
-    print("\n📥 Enter your test table query (end with a semicolon `;`):")
-    query = input().strip()
+def _sftp_stream(client: paramiko.SSHClient, remote_path: str,
+                 local_path: str, mode: str = "wb") -> int:
+    """
+    Stream a remote file to local in 4 MB chunks.
+    mode='wb' overwrites; mode='ab' appends (used when merging batches).
+    Returns total bytes transferred.
+    """
+    sftp      = client.open_sftp()
+    file_size = sftp.stat(remote_path).st_size
+    xferred   = 0
 
-    # Run Beeline and get CSV
-    local_csv_path = run_beeline_and_download_csv(ssh_client, query)
-
-    # Load into pandas DataFrame
-    if local_csv_path:
-        try:
-            df1 = pd.read_csv(local_csv_path)
-        except Exception as e:
-            print(f"❌ Failed to read CSV: {e}")        
-
-    # Close SSH
-    ssh_client.close()
-    print("🔒 SSH connection closed.")
-    
-    
-    ########################################
-    my_variable_1 = 'Yes' #'row_col_count' 'No'
-    my_variable_2 = [] #'columntodrop', [])
-    my_variable_3 = [] #'columntoretain', [])
-    #
-    var2 = input("Enter columns to skip (separated by comma ','): ")
-    if var2.strip() == "":
-        word_list = []
-    else:
-        word_list2 = [word.strip() for word in var2.split(',')]
-        my_variable_2 = word_list2
-        
-    var3 = input("Enter columns to reatin (separated by comma ','): ")    
-    if var3.strip() == "":
-        word_list = []
-    else:
-        word_list3 = [word.strip() for word in var3.split(',')]    
-        my_variable_3 = word_list3
-    
-    
-    #
-    print("\n📊 Performing Validation....\n")
-    
-    print("Skipped Columns  = ",my_variable_2)
-    print("Retained Columns = ",my_variable_3)
-    
-    DFDSS = pd.DataFrame(df1) #test
-    DFPAX = pd.DataFrame(df2) #actual
-    
-    # Drop specified columns
-    if len(my_variable_2) > 0:
-        dfdss_cols_to_drop = column_identification(DFDSS, my_variable_2)
-        dfpax_cols_to_drop = column_identification(DFPAX, my_variable_2)
-
-        DFDSS = DFDSS.drop(dfdss_cols_to_drop, axis=1)
-        DFPAX = DFPAX.drop(dfpax_cols_to_drop, axis=1)
-
-    # Clean data
-    DFDSS = data_cleaning(DFDSS)
-    DFPAX = data_cleaning(DFPAX)
-
-    # Normalize column names to lowercase and alphanumeric
-    my_variable_3 = [re.sub('[^a-zA-Z0-9]', '', names.lower()) for names in my_variable_3]
-
-    # Perform row and column count validation
-    if my_variable_1 == 'Yes':
-        if DFDSS.shape == DFPAX.shape and (DFPAX.columns == DFDSS.columns).sum() == DFPAX.shape[1]:
-            if DFDSS.equals(DFPAX) == True:
-                # If data is identical            
-                result_df = pd.DataFrame({'Result': ['Both the datasets are the same.']})
-                print(result_df)
-                result_df.to_csv("validation_op.csv", index=False)
-            else:
-                # Data mismatch detected
-                temp = pd.DataFrame(DFDSS == DFPAX)
-                df1 = temp[~temp.all(axis=1)]
-                
-                for i in df1.columns:
-                    if len(df1.index[df1[i] == False]) > 0:
-                        error_df = DFDSS.iloc[df1.index[df1[i] == False]].loc[:,i:]
-                        actual_df = DFPAX.iloc[df1.index[df1[i] == False]].loc[:,i:]
-
-                        if len(my_variable_3) > 0:
-                            retained_column = pd.DataFrame (DFDSS.iloc[df1.index[df1[i] == False]])[my_variable_3[0]]
-                            
-                        break
-
-                new_column_name = actual_df.columns[0]
-                error_df.insert(1, new_column_name +'_test', actual_df[new_column_name])
-
-                if len(my_variable_3) > 0:
-                    error_df.insert(0, my_variable_3[0]+ ' (primarykey)', retained_column)
-
-                result_df = error_df
-                result_df.to_csv("validation_op.csv", index=False)
-                print(result_df)
-        else:
-            # Shape or column mismatch
-            mismatch_df = pd.DataFrame()
-            missing_paxata_col = []
-            missing_dataiku_col = []
-
-            if DFDSS.shape != DFPAX.shape:
-                df_op = pd.DataFrame({'Result': ['There is a mismatch in actual, test row and column counts.'],'test Row/Column count': [DFDSS.shape],'actual Row/Column count': [DFPAX.shape]  })
-                mismatch_df = mismatch_df._append(df_op)
-
-            elif (DFPAX.columns == DFDSS.columns).sum() != DFPAX.shape[1] :
-                for i in DFPAX.columns:
-                    if i not in DFDSS.columns:
-                        missing_paxata_col.append(i)
-
-                for j in DFDSS.columns:
-                    if j not in DFPAX. columns:
-                        missing_dataiku_col.append(j)
-
-                df_op2 = pd.DataFrame({'Result': ['There is mismatch in actual, test column names. '], 'Missing actual columns': [missing_paxata_col],'missing test columns':[missing_dataiku_col] })
-                mismatch_df = mismatch_df._append (df_op2)
-
-            
-            result_df = mismatch_df
-            result_df.to_csv("validation_op.csv", index=False)
-            print(result_df)
-
-    else:
-        print("------------")
-        if DFDSS.equals(DFPAX) == True:
-            df = pd.DataFrame({'Result': ['Both the tables are same' ]})
-            result_df = df
-            result_df.to_csv("validation_op.csv", index=False)            # Compute a Pandas dataframe to write into OUTPUT DATASET NAME
-            
-
-        else:
-            temp = pd.DataFrame(DFDSS == DFPAX)
-            df1 = temp[~temp.a11(axis=1)]
-            for i in df1.columns:
-                if len(df1.index[df1[i] == False]) > 0:
-                    error_df = DFDSS.iloc[df1.index[df1[i] == False]].loc[:, i:]
-                    actual_df = DFPAX.iloc[df1.index[df1[i] == False]].loc[:, i:]
-
-                    if len(my_variable_3) > 0:
-                        retained_column = pd.DataFrame(DFDSS.iloc[df1.index[df1[i] == False]]) [my_variable_3[0]]
-
+    with open(local_path, mode) as out_fh:
+        with sftp.open(remote_path, "rb") as src:
+            while True:
+                chunk = src.read(SFTP_CHUNK_BYTES)
+                if not chunk:
                     break
-            new_column_name = actual_df.columns[0]
-            error_df.insert (1, new_column_name+ '_test', actual_df[new_column_name])
+                out_fh.write(chunk)
+                xferred += len(chunk)
+                pct = xferred / file_size * 100 if file_size else 0
+                log.info("  SFTP: %5.1f%%  (%.1f / %.1f MB)",
+                         pct, xferred / 1_048_576, file_size / 1_048_576)
 
-            if len(my_variable_3) > 0:
-                error_df.insert(0, my_variable_3[0]+ ' (primarykey)', retained_column)
-
-            result_df = error_df
-            result_df.to_csv("validation_op.csv", index=False)
+    sftp.close()
+    return xferred
 
 
+# =============================================================================
+# STRATEGY A: HDFS parallel  (fastest — for 500K+ rows)
+# =============================================================================
 
-        
-    ########################################
+def _strategy_hdfs(client: paramiko.SSHClient, jdbc: str,
+                   query: str, local_path: str) -> None:
+    """
+    Step 1: INSERT OVERWRITE into an HDFS temp dir.
+            Hive's distributed engine writes multiple part-files simultaneously.
+    Step 2: hdfs dfs -getmerge (server-side streaming cat) into one file.
+    Step 3: Prepend the header row.
+    Step 4: SFTP-stream the merged file locally.
+
+    Why it's fast: no row-by-row JDBC serialisation.
+    Hive writes directly to HDFS in parallel; getmerge is a server-side IO op.
+    """
+    ts       = int(time.time())
+    hdfs_dir = f"/tmp/hive_dl_hdfs_{ts}"
+    merged   = f"{REMOTE_TMP_DIR}/merged_{ts}.csv"
+
+    # ---- Step 1: Collect headers before INSERT strips them ------------------
+    headers = _get_headers(client, jdbc, query)
+
+    # ---- Step 2: INSERT OVERWRITE -------------------------------------------
+    hql = (
+        f"INSERT OVERWRITE DIRECTORY '{hdfs_dir}' "
+        f"ROW FORMAT DELIMITED FIELDS TERMINATED BY ',' "
+        f"STORED AS TEXTFILE "
+        f"{query}"
+    )
+    log.info("Strategy A: HDFS parallel  ->  INSERT OVERWRITE ...")
+
+    dummy = f"{REMOTE_TMP_DIR}/__ins_{ts}.txt"
+    for attempt in range(1, MAX_RETRIES + 1):
+        _run(client, _beeline_cmd(jdbc, hql, dummy),
+             timeout=CMD_TIMEOUT_SEC, silent=True)
+        count_out, _ = _run(client,
+            f"hdfs dfs -ls '{hdfs_dir}' 2>/dev/null | grep -c 'part-' || echo 0",
+            silent=True, timeout=30)
+        if int(count_out.strip() or 0) > 0:
+            log.info("  INSERT complete (%s part-file(s)).", count_out.strip())
+            break
+        if attempt < MAX_RETRIES:
+            log.warning("  No part-files yet; retry %d/%d ...", attempt, MAX_RETRIES)
+            time.sleep(RETRY_DELAY_SEC)
+    else:
+        raise RuntimeError(
+            "INSERT OVERWRITE produced no HDFS output. "
+            "Check /tmp/beeline_err_*.log on the server."
+        )
+
+    # ---- Step 3: Server-side merge ------------------------------------------
+    log.info("  Merging part-files with hdfs dfs -getmerge ...")
+    _, err = _run(client, f"hdfs dfs -getmerge '{hdfs_dir}' '{merged}'",
+                  timeout=1800, silent=True)
+    if err:
+        log.debug("getmerge stderr: %s", err[:200])
+    if _file_size(client, merged) == 0:
+        raise RuntimeError("hdfs -getmerge produced an empty file.")
+
+    # ---- Step 4: Prepend header row -----------------------------------------
+    if headers:
+        header_csv = ",".join(
+            f'"{h}"' if ("," in h or '"' in h) else h for h in headers
+        )
+        # Use printf to avoid issues with special chars in echo
+        _run(client,
+             f"{{ printf '%s\\n' '{header_csv}'; cat '{merged}'; }} "
+             f"> '{merged}.hdr' && mv '{merged}.hdr' '{merged}'",
+             timeout=600)
+
+    # ---- Step 5: SFTP to local ----------------------------------------------
+    log.info("  Streaming merged file via SFTP -> %s", local_path)
+    _sftp_stream(client, merged, local_path, mode="wb")
+
+    # ---- Cleanup ------------------------------------------------------------
+    _run(client,
+         f"hdfs dfs -rm -r '{hdfs_dir}' 2>/dev/null ; rm -f '{merged}' '{dummy}'",
+         timeout=60, silent=True)
+    log.info("  HDFS temp files cleaned up.")
+
+
+# =============================================================================
+# STRATEGY B: Beeline -> remote file -> SFTP  (medium data / fallback)
+# =============================================================================
+
+def _strategy_beeline_sftp(client: paramiko.SSHClient, jdbc: str,
+                            query: str, local_path: str) -> None:
+    """
+    Run beeline on the server and write output to a remote temp file.
+    This bypasses the SSH channel buffer bottleneck that makes direct streaming
+    slow for large datasets. Then SFTP-stream the file to local in 4 MB chunks.
+    """
+    ts     = int(time.time())
+    remote = f"{REMOTE_TMP_DIR}/export_{ts}.csv"
+
+    log.info("Strategy B: Beeline + SFTP stream")
+    for attempt in range(1, MAX_RETRIES + 1):
+        log.info("  Beeline (attempt %d/%d) ...", attempt, MAX_RETRIES)
+        _run(client, _beeline_cmd(jdbc, query, remote),
+             timeout=CMD_TIMEOUT_SEC, silent=True)
+
+        if _file_size(client, remote) > 0:
+            break
+        if attempt < MAX_RETRIES:
+            log.warning("  Remote CSV empty; retry in %ds ...", RETRY_DELAY_SEC)
+            time.sleep(RETRY_DELAY_SEC)
+    else:
+        raise RuntimeError(
+            "Beeline export failed. Check /tmp/beeline_err_*.log on the server."
+        )
+
+    _sftp_stream(client, remote, local_path, mode="wb")
+
+    try:
+        client.open_sftp().remove(remote)
+    except Exception:
+        pass
+
+
+# =============================================================================
+# STRATEGY C: Beeline stdout  (pure fallback, small data only)
+# =============================================================================
+
+def _strategy_beeline_stdout(client: paramiko.SSHClient, jdbc: str,
+                              query: str, local_path: str) -> None:
+    """
+    Pipe beeline output directly through the SSH channel.
+    Simple, no temp files, but slow for anything over ~100K rows
+    due to SSH channel buffer throttling.
+    """
+    log.info("Strategy C: Beeline stdout (fallback)")
+    hql_esc = query.replace("'", "'\\''")
+    cmd = (
+        f"beeline --fetchSize={BEELINE_FETCH_SIZE} "
+        f"--silent=true --outputformat=csv2 --showHeader=true "
+        f"--nullemptystring=true "
+        f"-u \"{jdbc}\" "
+        f"-e '{hql_esc}'"
+    )
+
+    transport = client.get_transport()
+    chan = transport.open_session()
+    chan.settimeout(CMD_TIMEOUT_SEC)
+    chan.exec_command(cmd)
+
+    lines_written = 0
+    with open(local_path, "w", encoding="utf-8", newline="") as fh:
+        leftover = ""
+        while not chan.exit_status_ready() or chan.recv_ready():
+            if chan.recv_ready():
+                data = chan.recv(65536).decode("utf-8", errors="replace")
+                leftover += data
+                parts = leftover.split("\n")
+                leftover = parts[-1]
+                for line in parts[:-1]:
+                    fh.write(line + "\n")
+                    lines_written += 1
+        if leftover:
+            fh.write(leftover)
+            lines_written += 1
+
+    log.info("  Written %s lines (including header).", f"{lines_written:,}")
+
+
+# =============================================================================
+# Main entrypoint
+# =============================================================================
+
+def export_hive_to_csv(query: str, local_csv_path: str) -> str:
+    """
+    Download a Hive query result to a local CSV using only SSH credentials.
+
+    Automatically selects the best strategy based on row count + server tools:
+
+      HDFS available + rows >= 500K  ->  Strategy A: HDFS parallel (fastest)
+      Otherwise                      ->  Strategy B: Beeline + SFTP
+      Fallback on failure            ->  Strategy C: Beeline stdout
+
+    The output CSV always includes column headers on the first row.
+
+    Parameters
+    ----------
+    query          : Any valid HQL SELECT statement
+    local_csv_path : Local file path where the CSV will be saved
+
+    Returns
+    -------
+    Absolute path of the written CSV.
+    """
+    local_csv_path = str(Path(local_csv_path).resolve())
+    Path(local_csv_path).parent.mkdir(parents=True, exist_ok=True)
+
+    t0     = time.time()
+    client = _connect()
+
+    try:
+        # -- Probe the server -------------------------------------------------
+        caps = _detect_capabilities(client)
+
+        if not caps.get("beeline") and not caps.get("hive_cli"):
+            raise RuntimeError(
+                "Neither beeline nor hive CLI found on the server. "
+                "Contact your Hadoop admin."
+            )
+
+        # -- Ensure scratch dir exists ----------------------------------------
+        _run(client, f"mkdir -p '{REMOTE_TMP_DIR}'", silent=True)
+
+        # -- Discover JDBC URL ------------------------------------------------
+        jdbc = _find_jdbc_url(client)
+
+        # -- Estimate rows to choose strategy ---------------------------------
+        row_count = _estimate_rows(client, jdbc, query)
+
+        # -- Strategy selection -----------------------------------------------
+        prefer_hdfs = (
+            caps.get("hdfs_ok")
+            and (row_count is None or row_count >= HDFS_THRESHOLD)
+        )
+
+        if prefer_hdfs:
+            log.info("Selected: Strategy A (HDFS parallel)  |  rows: %s",
+                     f"{row_count:,}" if row_count else "unknown")
+            try:
+                _strategy_hdfs(client, jdbc, query, local_csv_path)
+            except RuntimeError as exc:
+                log.warning("Strategy A failed: %s  ->  falling back to B.", exc)
+                _strategy_beeline_sftp(client, jdbc, query, local_csv_path)
+
+        else:
+            log.info("Selected: Strategy B (Beeline + SFTP)  |  rows: %s",
+                     f"{row_count:,}" if row_count else "unknown")
+            try:
+                _strategy_beeline_sftp(client, jdbc, query, local_csv_path)
+            except RuntimeError as exc:
+                log.warning("Strategy B failed: %s  ->  falling back to C.", exc)
+                _strategy_beeline_stdout(client, jdbc, query, local_csv_path)
+
+    finally:
+        _run(client,
+             f"rm -f {REMOTE_TMP_DIR}/__cnt_*.csv "
+             f"{REMOTE_TMP_DIR}/__hdr_*.csv "
+             f"{REMOTE_TMP_DIR}/__ins_*.txt 2>/dev/null",
+             silent=True, timeout=15)
+        client.close()
+        log.info("SSH connection closed.")
+
+    elapsed = time.time() - t0
+    size_mb = Path(local_csv_path).stat().st_size / 1_048_576
+    log.info("Done in %.1f s  |  %.2f MB  ->  %s", elapsed, size_mb, local_csv_path)
+    return local_csv_path
+
+
+# =============================================================================
+# CLI
+# =============================================================================
 
 if __name__ == "__main__":
-    main()
+    import argparse
 
+    parser = argparse.ArgumentParser(
+        description="Export a Hive query to a local CSV via SSH.",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  python hive_downloader.py \\
+      --query "SELECT * FROM prod_db.orders WHERE dt='2024-01-01'" \\
+      --output ./orders.csv
 
+  python hive_downloader.py \\
+      --query "SELECT user_id, COUNT(*) AS cnt FROM logs GROUP BY user_id" \\
+      --output ./user_counts.csv
+        """,
+    )
+    parser.add_argument("--query",  required=True, help="HQL SELECT statement")
+    parser.add_argument("--output", required=True, help="Local path for the output CSV")
 
+    # Allow runtime overrides for SSH and thresholds
+    parser.add_argument("--ssh-host",       default=SSH_CONFIG["ssh_host"])
+    parser.add_argument("--ssh-user",       default=SSH_CONFIG["ssh_user"])
+    parser.add_argument("--ssh-password",   default=SSH_CONFIG["ssh_password"])
+    parser.add_argument("--ssh-port",       type=int, default=SSH_CONFIG["ssh_port"])
+    parser.add_argument("--hdfs-threshold", type=int, default=HDFS_THRESHOLD,
+                        help="Row count above which HDFS strategy is used (default 500000)")
+    parser.add_argument("--tmp-dir",        default=REMOTE_TMP_DIR,
+                        help="Writable temp directory on the remote server")
+    args = parser.parse_args()
 
---------------
-py 11
+    # Apply CLI overrides
+    SSH_CONFIG.update(
+        ssh_host     = args.ssh_host,
+        ssh_user     = args.ssh_user,
+        ssh_password = args.ssh_password,
+        ssh_port     = args.ssh_port,
+    )
+    HDFS_THRESHOLD = args.hdfs_threshold
+    REMOTE_TMP_DIR = args.tmp_dir
 
-PS C:\Users\bankid\Music> venv\Scripts\python.exe -c "import platform; print(platform.python_version()); print(platform.architecture())"
-
-
-PS C:\Users\bankid\Music> py -3.11 -m venv venv
-   
-PS C:\Users\bankid\Music> venv\Scripts\pip.exe install pandas --trusted-host pypi.org --trusted-host files.pythonhosted.org --trusted-host pypi.python.org
-PS C:\Users\bankid\Music> venv\Scripts\python.exe test1.py
-
+    export_hive_to_csv(query=args.query, local_csv_path=args.output)
