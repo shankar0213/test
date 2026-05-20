@@ -1,3 +1,20 @@
+import csv
+
+input_file = "input.csv"
+output_file = "output_pipe.csv"
+
+with open(input_file, "r", newline='', encoding="utf-8") as infile, \
+     open(output_file, "w", newline='', encoding="utf-8") as outfile:
+
+    reader = csv.reader(infile, delimiter=',', quotechar='"')
+    writer = csv.writer(outfile, delimiter='|', quotechar='"')
+
+    for row in reader:
+        writer.writerow(row)
+
+print("Conversion completed")
+
+
 [OK] SSH connected to 10.83.212.30
 
 ============================================================
