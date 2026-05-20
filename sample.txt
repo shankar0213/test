@@ -1,5 +1,21 @@
 import csv
 
+with open("output_pipe.csv", "r", encoding="utf-8") as file:
+
+    reader = csv.reader(file, delimiter='|')
+
+    next(reader)  # skip header
+
+    for row in reader:
+
+        emp_id = row[0]
+        city = row[2]
+
+        print(emp_id, city)
+
+
+import csv
+
 input_file = "input.csv"
 output_file = "output_pipe.csv"
 
